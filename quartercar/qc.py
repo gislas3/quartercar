@@ -1,19 +1,13 @@
 import numpy
 from .roadprofile import RoadProfile
 
-"""
-This is a reST style.
-
-:param param1: this is a first param
-:param param2: this is a second param
-:returns: this is a description of what is returned
-:raises keyError: raises an exception
-"""
-
-
-
 class QC():
-
+    """
+    A quarter car model that represents the interplay between a road surface (`RoadProfile`), a fixed (and always grounded) mass and a sprung mass.
+    The class 
+      1) calculates acceleration values from a `RoadProfile` and velocities (see `run`) and 
+      2) reverses the calculation to generate a `RoadProfile` from accelerations, distances and velocities.
+    """
 
     def __init__(self): #TODO: Put in all different car parameters (with defaults) as constructor arguments
         """set car parameters here, e.g. tire spring, suspension spring, damping constant, etc.
