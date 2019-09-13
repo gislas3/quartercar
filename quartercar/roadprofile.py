@@ -27,10 +27,10 @@ class RoadProfile():
         if not np.all(np.diff(distances) > 0):
             raise ValueError('All distances must be increasing and not the same')
         
-        #print("Self.elevations is {0}, self.distances is {1}".format(self.elevations, self.distances))
 
     def get_elevations(self):
         return self.elevations
+
 
     def get_distances(self):
         return self.distances
@@ -98,27 +98,24 @@ class RoadProfile():
             #TODO: Probably need some check in case there are a few distances closely spaced, and others not so
         else:
             min_dist = min(distance, self.length())
-        final_dists = np.linspace(0, self.length(), int(self.length() / min_dist))
+        number_of_samples = int(self.length() / min_dist) + 1
+        final_dists = np.linspace(0, self.length(), number_of_samples)
         final_elevs = np.interp(final_dists, self.distances, self.elevations)
         return RoadProfile(final_dists, final_elevs)
 
 
     def length(self):
         """
-
         :return: The length of the entire profile in meters
         """
-        
         return self.distances[-1]
 
     def split(self, distance):
         """
-
         :param distance: The distance in meters in which the road profile should be split
         :return: A list of RoadProfile split via distance
         """
         pass
-
 
 
     def compute_smoothed_slopes(self, base_len=.25, init_length=11):
@@ -154,7 +151,6 @@ class RoadProfile():
         #print("List slps is {0}".format(list_slps))
         #TODO: Make check to ensure that sample rate is high enough
         return x1, np.array(list_slps)
-
 
 
     def to_iri(self):

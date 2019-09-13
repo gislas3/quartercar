@@ -17,11 +17,11 @@ def test_break_constructor():
 
 def test_space_profile_evenly():
     x = [0, 1, 2, 3]
-    y = [0, 1, 2, 3]
+    y = [0, 2, 4, 6]
     rp = RoadProfile(x, y)
     rp_new = rp.space_evenly(.5)
-    assert(rp_new.get_distances() == np.array([0, .5, 1, 1.5, 2, 2.5, 3 ]))
-    assert(rp_new.get_elevations() == np.array([0, .5, 1, 1.5, 2, 2.5, 3 ]))
+    np.allclose(rp_new.get_distances(), np.array([0, .5, 1., 1.5, 2., 2.5, 3. ]))
+    np.allclose(rp_new.get_elevations(), np.array([0, 1, 2, 3, 4, 5, 6]))
 
 
 
