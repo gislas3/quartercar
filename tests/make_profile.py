@@ -31,7 +31,7 @@ def test_profile_func(x):
 
 def test_profile(prof_len=11, delta=.25):
     #The rationale + table for this can be found at:
-    # http://documents.worldbank.org/curated/en/851131468160775725/pdf/multi-page.pdf, page 50 in the pdf viewer, page numbers 41-42
+    # http://documents.worldbank.org/curated/en/851131468160775725/pdf/multi-page.pdf, page 50 in the pdf viewer, page numbers 41-42mar
     # 25 meter long formula:
     # y = 0, x < 1
     # y = x - 1, x>= 1 x <= 3
