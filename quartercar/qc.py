@@ -11,7 +11,7 @@ class QC():
       2) reverses the calculation to generate a `RoadProfile` from accelerations, distances and velocities.
     """
 
-    def __init__(self, c_s, k_s, k_l, m_s, m_u): #TODO: Put in all different car parameters (with defaults) as constructor arguments
+    def __init__(self, c_s=0, k_s=0, k_l=0, m_s=0, m_u=0): #TODO: Put in all different car parameters (with defaults) as constructor arguments
         """
         :param c_s: The suspension damping rate (assumes units N*s/m)
         :param k_s: The suspension spring constant (assumes units N/m)
@@ -67,17 +67,16 @@ class QC():
 
 
 
-    def run(self, road_profile, velocity = None, velocities = None, distances=None, sample_rate_hz=100):
+    def run(self, road_profile, velocities, distances, sample_rate_hz=100):
         """
         This is where we generate the acceleration values from the road profile, running the entire QC simulation
 
         :param road_profile: An array or list like of floating point values (in mm) of road profile elevations
-        :parm velocity: A constant that represents the velocity of the car over the road profile (in m/s)
-        :param velocities: An array that contains the instantaneous velocity of the car over specified distances (in m/s)
-        :param distances: An array that contains a one-to-one mapping of distance traveled at each specified velocity in velocities (in m)
+        :param velocities: Either an array or an float. If an array is given it is assumed to contain the instantaneous velocity of the car over specified distances (in m/s). If a float is given, it is assumed to be a fixed velocity for all road profile points.
+        :param distances: Either an array or an float. If an array is given it is assumed to contain a one-to-one mapping of distance traveled at each specified velocity in velocities (in m). If a float is given the data points are assumed to be evenly spaced with the given distance.
         :return: list of acceleration values (in m/s^2)
         """
-        sample_rate_hz = 100
+        #sample_rate_hz = 100
         a = np.array(
             [[0, 1, 0, 0], [-self.k2, -self.c, self.k2, self.c], [0, 0, 0, 1], [self.k2 / self.mu, self.c / self.mu, -(self.k1 + self.k2) / self.mu, -self.c / self.mu]])
 
@@ -91,16 +90,18 @@ class QC():
         #rp_cleaned = road_profile.clean()
         #TODO: Appropriate error checking below
 
-        road_sample = road_profile.get_car_sample(velocity, velocities, distances, sample_rate_hz)
-        if(velocity is None):
-            #if using average dx:
-            dx = np.average(np.diff(road_sample.get_distances()))
-            #if using min dx:
-            #dx = np.min(np.diff(road_sample.get_distances()))
-            total_time = np.sum(distances/velocities)
-            road_sample = road_sample.clean(dx)
-            velocity = road_sample.length()/total_time
-            # should be even since road profile sampled evenly
+        # Get the points touched by the car at the given velocity, distance car traveled at velocity, and sample rate
+        road_sample = road_profile.get_car_sample(velocities, distances, sample_rate_hz)
+
+        #if using average dx:
+        dx = np.average(np.diff(road_sample.get_distances()))
+        #if using min dx:
+        #dx = np.min(np.diff(road_sample.get_distances()))
+        total_time = np.sum(distances/velocities)
+        road_sample = road_sample.clean(dx)
+        velocity = road_sample.length()/total_time
+        # should be even since road profile sampled evenly
+        
         times = np.cumsum(np.diff(road_sample.get_distances()) / velocity)
         x0 = self.get_initial_state(road_sample)
 

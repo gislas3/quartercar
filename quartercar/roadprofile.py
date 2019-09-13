@@ -7,15 +7,26 @@ from scipy.linalg import expm, inv
 
 class RoadProfile():
 
-    def __init__(self, elevations, distances):
+    def __init__(self, distances, elevations):
         """
-
-        :param elevations: A list of elevations (in mm)
         :param distances: A list of distance from the starting point of the profile (in units meters)
+        :param elevations: A list of elevations (in mm)
+        :raises: ValueError if the distances are not increasing and any two distances have the same value
+        :raises: ValueError if the elevations and distances are *not* the same length
+        :raises: ValueError if there are less than 2 data points 
         """
-
         self.elevations = elevations
         self.distances = distances
+
+        if not len(elevations) == len(distances):
+            raise ValueError(f'Expected length of elevations (${len(elevations)}) and distances (${distances}) to be equal')
+
+        if len(elevations) < 2:
+            raise ValueError(f'Expected at least two data points but received ${len(elevations)}')
+
+        if not np.all(np.diff(distances) > 0):
+            raise ValueError('All distances must be increasing and not the same')
+        
         #print("Self.elevations is {0}, self.distances is {1}".format(self.elevations, self.distances))
 
     def get_elevations(self):
@@ -25,65 +36,71 @@ class RoadProfile():
         return self.distances
 
 
-    def get_car_sample(self, velocity=None, vel_dists=None, sample_rate_hz=100):
+    def get_car_sample(self, distances, velocities, sample_rate_hz=100):
         """
         This function returns a sample of its road profile from a car driving on it at a constant speed or range of speed
-        :param velocity: Should be set if the car traveled at a constant velocity over the entire road profile (should be m/s)
-        :param velocities: Should be a list of velocities (in m/s) if there is an instantaneous velocity at each point in the road profile
-        (e.g. the car had different velocities over the course of the profile)
+        :param velocities: Either an array or an float. If an array is given it is assumed to contain the instantaneous velocity of the car over specified distances (in m/s). If a float is given, it is assumed to be a fixed velocity for all road profile points.
+        :param distances: Either an array or an float. If an array is given it is assumed to contain a one-to-one mapping of distance traveled at each specified velocity in velocities (in m). If a float is given the data points are assumed to be evenly spaced with the given distance.
         :return: A list of times, distances, and elevations that can be used in a QC simulation
         """
 
         new_profile = None
-        if(velocity is not None): #can just compute time for each distance
-            delta_x = velocity/sample_rate_hz
-            new_profile = self.clean(delta_x) #get sample points where the car would actually be traveling on the road
 
-        elif(vel_dists is not None):
+        # Create evenly spaced 
+        if isinstance(velocities, float) and isinstance(distances, float):
+            delta_x = velocities/sample_rate_hz
+            new_profile = self.space_evenly(delta_x)
+
+        elif hasattr(velocities, '__len__') and hasattr(distances, '__len__'):
+            if not len(velocities) == len(distances):
+                raise ValueError(f'Distances and velocities are not the same length (${len(distances)} vs ${len(velocities)})')
+
             #What we want to do:
             #1. Get distance for each sample rate of the vehicle
             #2. Get elevation for each distance point
-            #3. Get times  based on each instantaneous velocity
+            #3. Get times based on each instantaneous velocity
             #4. Interpolate evenly spaced profile based on either min distance or average distance bet samples
             #5. Compute final times, distances, and elevations, return
-            velocities, dists = vel_dists[0], vel_dists[1]
+            #velocities, dists = vel_dists[0], vel_dists[1]
             dist_list, time_list = [], []
             total_dist = 0#, total_time = 0, 0
             for x in range(0, len(velocities)):
-                vel, dist = velocities[x], dists[x]
+                vel, dist = velocities[x], distances[x]
                 time = dist/vel #time in seconds it took to travel that interval
                 num_samples = time*sample_rate_hz #total number of samples over that interval
                 for y in range(0, int(num_samples)):
                     dist_list.append(total_dist)
-                    total_dist += 1
+                    total_dist += dist/num_samples
             new_dists = np.array(dist_list)
-            new_elevations = np.interp(np.array(dist_list), self.distances, self.elevations)
+            new_elevations = np.interp(new_dists, self.distances, self.elevations)
             new_profile = RoadProfile(new_dists, new_elevations)
+        else:
+            raise ValueError('Velocities and distances are expected to have the same type, but got: ' + type(velocities) + ' ' + type(distances))
 
+        #if velocities is not None: #can just compute time for each distance
+        #    pass
+            #get sample points where the car would actually be traveling on the road
+
+        #elif vel_dists is not None:
+            
         return new_profile
 
 
-    def clean(self, distance=None):
+    def space_evenly(self, distance=None):
         """
+        Returns a new `RoadProfile` where the distances are evenly spaced.
         :param distance: The length in mm desired between road elevation measurements
-        :return: A new immutable RoadProfile class instance
+        :return: A new immutable RoadProfile object with evenly spaced distances
         """
-        diffs = np.diff(self.distances)
-        inds = np.where(diffs > 0)[0] + 1
-        new_dists, new_elevs = self.distances[inds], self.elevations[inds]
-        if(len(new_dists) > 0):
-            length = new_dists[-1]
-            if distance is None:
-                min_dist = min(np.min(np.diff(new_dists)), .25) #for now, we are going to interpolate at min distance or 300 mm
-                #TODO: Probably need some check in case there are a few distances closely spaced, and others not so
-            else:
-                min_dist = min(distance, length)
-            final_dists = np.linspace(0, length, int(length/min_dist))
-            final_elevs = np.interp(final_dists, new_dists, new_elevs)
-            return RoadProfile(final_dists, final_elevs)
-        return None
 
-
+        if distance is None:
+            min_dist = min(np.min(np.diff(self.distances)), .25) #for now, we are going to interpolate at min distance or 300 mm
+            #TODO: Probably need some check in case there are a few distances closely spaced, and others not so
+        else:
+            min_dist = min(distance, self.length())
+        final_dists = np.linspace(0, self.length(), int(self.length() / min_dist))
+        final_elevs = np.interp(final_dists, self.distances, self.elevations)
+        return RoadProfile(final_dists, final_elevs)
 
 
     def length(self):
@@ -91,10 +108,8 @@ class RoadProfile():
 
         :return: The length of the entire profile in meters
         """
-        to_ret = None
-        if(len(self.distances) > 0 ):
-            to_ret = self.distances[-1]
-        return to_ret
+        
+        return self.distances[-1]
 
     def split(self, distance):
         """
@@ -102,6 +117,7 @@ class RoadProfile():
         :param distance: The distance in meters in which the road profile should be split
         :return: A list of RoadProfile split via distance
         """
+        pass
 
 
 
@@ -145,7 +161,7 @@ class RoadProfile():
         """
         :return: The IRI value over the entire road profile
         """
-        # parameters taken from Sayers paper, correspond to Golden Car simluation parameters, more details
+        # parameters taken from Sayers paper, correspond to Golden Car simulation parameters, more details
         # can be found here: http://onlinepubs.trb.org/Onlinepubs/trr/1995/1501/1501-001.pdf
         c = 6.0
         k_1 = 653
