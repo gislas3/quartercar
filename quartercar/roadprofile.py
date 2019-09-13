@@ -28,6 +28,19 @@ class RoadProfile():
             raise ValueError('All distances must be increasing and not the same')
         
 
+    def __eq__(self, other):
+        if not isinstance(other, RoadProfile):
+            return False
+
+        return len(self.distances) == len(other.distances) and \
+                np.allclose(self.distances, other.distances) and \
+                np.allclose(self.elevations, other.elevations)
+
+
+    def __repr__(self):
+        return f'RoadProfile(${self.distances}, ${self.elevations})'
+
+
     def get_elevations(self):
         return self.elevations
 
@@ -36,18 +49,18 @@ class RoadProfile():
         return self.distances
 
 
-    def get_car_sample(self, distances, velocities, sample_rate_hz=100):
+    def car_sample(self, distances, velocities, sample_rate_hz=100):
         """
         This function returns a sample of its road profile from a car driving on it at a constant speed or range of speed
         :param velocities: Either an array or an float. If an array is given it is assumed to contain the instantaneous velocity of the car over specified distances (in m/s). If a float is given, it is assumed to be a fixed velocity for all road profile points.
         :param distances: Either an array or an float. If an array is given it is assumed to contain a one-to-one mapping of distance traveled at each specified velocity in velocities (in m). If a float is given the data points are assumed to be evenly spaced with the given distance.
-        :return: A list of times, distances, and elevations that can be used in a QC simulation
+        :return: A RoadProfile that represents the points of the profile that was sampled by a car traveling at specified velocities (in m/s), with specified sample rate (in Hz)
         """
 
         new_profile = None
 
         # Create evenly spaced 
-        if isinstance(velocities, float) and isinstance(distances, float):
+        if isinstance(velocities, (int, float)) and isinstance(distances, (int, float)):
             delta_x = velocities/sample_rate_hz
             new_profile = self.space_evenly(delta_x)
 
@@ -71,6 +84,7 @@ class RoadProfile():
                 for y in range(0, int(num_samples)):
                     dist_list.append(total_dist)
                     total_dist += dist/num_samples
+            dist_list.append(total_dist)
             new_dists = np.array(dist_list)
             new_elevations = np.interp(new_dists, self.distances, self.elevations)
             new_profile = RoadProfile(new_dists, new_elevations)
