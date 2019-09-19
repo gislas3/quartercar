@@ -25,6 +25,12 @@ class RoadProfile():
             raise ValueError(f'Expected at least two data points but received ${len(elevations)}')
 
         if not np.all(np.diff(distances) > 0):
+            #print("Np.diff(distances) > 0 is {0}".format(np.diff(distances) > 0 ))
+            #print("All Np.diff(distances) > 0 is {0}".format(np.all(np.diff(distances) > 0)))
+            #print("Diffs are 0 at indices {0}".format(np.where(np.diff(distances) <= 0)))
+            #print(distances[np.where(np.diff(distances) == 0)])
+            #print("distances 50+ are {0}".format(distances[50:]))
+            #print("Diffs are {0}".format(np.diff(distances)))
             raise ValueError('All distances must be increasing and not the same')
         
 
@@ -113,6 +119,7 @@ class RoadProfile():
         else:
             min_dist = min(distance, self.length())
         number_of_samples = int(self.length() / min_dist) + 1
+        #print("Number of samples is {0}, length is {1}, min_dist is {2}".format(number_of_samples, self.length(), min_dist))
         final_dists = np.linspace(0, self.length(), number_of_samples)
         final_elevs = np.interp(final_dists, self.distances, self.elevations)
         return RoadProfile(final_dists, final_elevs)

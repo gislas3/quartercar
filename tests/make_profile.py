@@ -3,7 +3,7 @@ import numpy as np
 
 
 
-def make_sinusodal(wavelen, amplitude, prof_len, delta):
+def make_sinusodal(wavelen, amplitude, profile_len, delta):
     """
 
     :param wavelen: The wavelength of the sinusoidal function (in units meters)
@@ -12,14 +12,36 @@ def make_sinusodal(wavelen, amplitude, prof_len, delta):
     :param delta: The space between samples (in units meters)
     :return: A numpy array of profile elevation heights, and a numpy array of distance between points
     """
-    num_samples = int(prof_len/delta)
-    distances = np.linspace(0, prof_len, num_samples)
+    num_samples = int(profile_len/delta)
+    distances = np.linspace(0, profile_len, num_samples)
+    #print("Distances is {0}".format(distances))
     prof_hts = amplitude*np.sin((2*np.pi/wavelen)*distances)
-    return prof_hts, distances
+    return distances, prof_hts
+
+
+def make_gaussian(sigma, profile_len, delta, cutoff_freq):
+    """
+    For methodology, see page 186 of: http://systemdesign.illinois.edu/publications/All08b.pdf
+    :param sigma: The standard deviation of profile height for the gaussian distribution (in mm)
+    :param profile_len: The length of the profile (in meters)
+    :param delta: The space between samples (in meters)
+    :param cutoff_freq: The cutoff spatial frequency to use in the filtering step (low pass filter)
+    :return: Two arrays, one representing the distanace, another representing the profile heights
+    """
+    num_samples = profile_len/delta
+    distances = np.linspace(0, profile_len, num_samples)
+    prof_hts = np.random.norm(0, sigma, num_samples)
+    a = np.exp(-2*np.pi*cutoff_freq*delta)
+    b = 1 - np.exp(-2*np.pi*cutoff_freq*delta)
+    #TODO: Might want to generate fewer samples than distances, then use smoothing
+    for x in range(0, len(prof_hts)):
+        if(x > 0):
+            prof_hts[x] = b*prof_hts[x] + a*prof_hts[x-1]
+    return distances, prof_hts
 
 
 
-def test_profile_func(x):
+def iri_test_profile_func(x):
     if( x < 1):
         return 0
     elif(x >= 1 and x <=3):
@@ -29,7 +51,9 @@ def test_profile_func(x):
     else:
         return 0
 
-def test_profile(prof_len=11, delta=.25):
+
+
+def iri_test_profile(prof_len=11, delta=.25):
     #The rationale + table for this can be found at:
     # http://documents.worldbank.org/curated/en/851131468160775725/pdf/multi-page.pdf, page 50 in the pdf viewer, page numbers 41-42mar
     # 25 meter long formula:

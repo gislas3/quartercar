@@ -41,3 +41,6 @@ def test_get_car_sample_sequence():
                            2*np.array([0, .1, .2, .3, .4, .5, .6, .7, .8, .9, 1., 
                             1.2, 1.4, 1.6, 1.8, 2., 2.2, 2.4, 2.6, 2.8, 3.]))
     assert actual == expected
+
+def test_smoothed_slopes():
+    pass

@@ -2,6 +2,7 @@ import numpy
 from .roadprofile import RoadProfile
 import numpy as np
 from scipy import signal
+from matplotlib import pyplot as plt
 
 class QC():
     """
@@ -11,7 +12,7 @@ class QC():
       2) reverses the calculation to generate a `RoadProfile` from accelerations, distances and velocities.
     """
 
-    def __init__(self, c_s=0, k_s=0, k_l=0, m_s=0, m_u=0): #TODO: Put in all different car parameters (with defaults) as constructor arguments
+    def __init__(self, m_s=0, m_u=0, c_s=0, k_s=0, k_u=0): #TODO: Put in all different car parameters (with defaults) as constructor arguments
         """
         :param c_s: The suspension damping rate (assumes units N*s/m)
         :param k_s: The suspension spring constant (assumes units N/m)
@@ -29,7 +30,7 @@ class QC():
         #divide coefficients by sprung mass to make for easier computation into IRI algorithm
         #Can always get back originals by multiplying by m_s
         self.c = c_s/self.m_s
-        self.k1 = k_l/self.m_s
+        self.k1 = k_u/self.m_s
         self.k2 = k_s/self.m_s
         self.mu = m_u/self.m_s
 
@@ -48,7 +49,7 @@ class QC():
             #just return 0
             ind0 = inds[0][0]
             init_val = (elevations[ind0] - elevations[0])/dists[ind0]
-            x0 = np.array([[init_val], [0], [init_val], [0]])
+            x0 = np.array([[init_val/1000], [0], [init_val/1000], [0]])
         return x0
 
     def get_time_array(self, road_profile, velocities):
@@ -67,47 +68,69 @@ class QC():
 
 
 
-    def run(self, road_profile, velocities, distances, sample_rate_hz=100):
+    def run(self, road_profile,  distances, velocities, sample_rate_hz=100):
         """
         This is where we generate the acceleration values from the road profile, running the entire QC simulation
 
         :param road_profile: An array or list like of floating point values (in mm) of road profile elevations
         :param velocities: Either an array or an float. If an array is given it is assumed to contain the instantaneous velocity of the car over specified distances (in m/s). If a float is given, it is assumed to be a fixed velocity for all road profile points.
         :param distances: Either an array or an float. If an array is given it is assumed to contain a one-to-one mapping of distance traveled at each specified velocity in velocities (in m). If a float is given the data points are assumed to be evenly spaced with the given distance.
+        :param sample_rate_hz: The sampling rate of the accelerometer attached to the vehicle body in Hz (default: 100 Hz)
         :return: list of acceleration values (in m/s^2)
         """
         #sample_rate_hz = 100
         a = np.array(
             [[0, 1, 0, 0], [-self.k2, -self.c, self.k2, self.c], [0, 0, 0, 1], [self.k2 / self.mu, self.c / self.mu, -(self.k1 + self.k2) / self.mu, -self.c / self.mu]])
 
+        print("A shape is {0}".format(a.shape))
         b = np.array([[0], [0], [0], [self.k1 / self.mu]])
+        print("B shape is {0}".format(b.shape))
         c = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1], [-self.k2, -self.c, self.k2, self.c]])
+        print("C shape is {0}".format(c.shape))
         #More information about the state space can be found in http://onlinepubs.trb.org/Onlinepubs/trr/1995/1501/1501-001.pdf
         #Basically, we just want dx/dt = Ax + bu, y = x
-        state_space = signal.StateSpaceContinuous(a, b, c, np.array([[0]]))
+        state_space = signal.StateSpace(a, b, c, None)
         # for now, we are going to use distance instead of time, and we are going to assume that it's already evenly spaced
         # otherwise, do something like below
         #rp_cleaned = road_profile.clean()
         #TODO: Appropriate error checking below
 
         # Get the points touched by the car at the given velocity, distance car traveled at velocity, and sample rate
-        road_sample = road_profile.get_car_sample(velocities, distances, sample_rate_hz)
-
+        road_sample = road_profile.car_sample( distances,velocities,sample_rate_hz)
+        if isinstance(velocities, (int, float)) and isinstance(distances, (int, float)):
+            #should already be spaced evenly
+            velocity = velocities
+        else:
+            dx = np.average(np.diff(road_sample.get_distances())) #evenly space, using linear interpolation/average difference between points
+            total_time = np.sum(distances / velocities)
+            road_sample = road_sample.space_evenly(dx) #resample with even spacing in between consecutive samples
+            velocity = road_sample.length() / total_time #use average
+        print(road_sample)
+        #assume always starting from zero
+        times = np.concatenate((np.zeros(1), np.cumsum(np.diff(road_sample.get_distances()) / velocity)))
+        times = np.concatenate((np.zeros(1), np.cumsum(np.diff(road_sample.get_distances()) / velocity)))
+        print("Times[0] is {0}".format(times[0]))
         #if using average dx:
-        dx = np.average(np.diff(road_sample.get_distances()))
+
         #if using min dx:
         #dx = np.min(np.diff(road_sample.get_distances()))
-        total_time = np.sum(distances/velocities)
-        road_sample = road_sample.clean(dx)
-        velocity = road_sample.length()/total_time
+
+
+
         # should be even since road profile sampled evenly
         
-        times = np.cumsum(np.diff(road_sample.get_distances()) / velocity)
-        x0 = self.get_initial_state(road_sample)
+        #plt.plot(times, road_sample.get_elevations()/1000)
+        #plt.xticks(np.arange(0, 10, .1), [0] + 10*[None] + [1] + 10*[None] + [2] + 77*[None])
+        #plt.vlines(.2, -.02, .02)
+        #plt.show()
+        #x0 = self.get_initial_state(road_sample)
+        x0 = np.zeros(4).reshape(4, -1) #Didn't seem to have much effect when looking at the plots how we initialized the system
+        #print("len(road_sample.get_elevations()) is {0}, len(times) is {1}".format(len(road_sample.get_elevations()), len(times)))
+        T, yout, xout = signal.lsim(state_space, road_sample.get_elevations()/1000, times, x0.reshape(1, -1))
 
-        final_states = signal.lsim(state_space, road_sample.get_elevations(), times, x0)
+        #print("T.shape is {0}, y.shape is {1}, x.shape is {2}".format(T.shape, yout.shape, xout.shape))
 
-        return final_states
+        return T, yout, xout
 
 
 
@@ -120,7 +143,7 @@ class QC():
 
         """
 
-
+        TODO: Still need to figure out the best way to do this
         :param accelerations: An array of vertical accelerations in (m/s^2) (assumes that preprocessing step,
             subtracting gravity/accounting for orientation has already occurred)
         :param distances: An array that contains the distance (in mm) from start of measurements
