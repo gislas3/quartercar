@@ -15,7 +15,7 @@ def test_sinusodial1(): #TODO - Test varied velocities
     m_s, m_u, c_s, k_s, k_u = 208, 28, 1300, 18709, 127200 #QC parameters
     qc1 = qc.QC(m_s, m_u, c_s, k_s, k_u)
     rp1 = rp.RoadProfile(distances, heights)
-    T, yout, xout = qc1.run(rp1,  100, velocity, 100)
+    T, yout, xout, new_distances = qc1.run(rp1,  100, velocity, 100)
     print("T.shape is {0}, y.shape is {1}, x.shape is {2}".format(T.shape, yout.shape, xout.shape))
 
 
@@ -35,3 +35,23 @@ def test_sinusodial1(): #TODO - Test varied velocities
 
 def test_sinusodial2():
     pass
+
+def test_inverse1():
+    wavelen, amp, prof_len, delta = 2, 10, 100, .01  # 2 meter long wavelength, 20 mm amplitude, 100 meters long, spacing of .01 meters bet samples
+    velocity = 10
+    distances, heights = mp.make_sinusodal(wavelen, amp, prof_len, delta)
+    m_s, m_u, c_s, k_s, k_u = 208, 28, 1300, 18709, 127200  # QC parameters
+    qc1 = qc.QC(m_s, m_u, c_s, k_s, k_u)
+    rp1 = rp.RoadProfile(distances, heights)
+    plt.plot(rp1.get_distances(), rp1.get_elevations(), color='b')
+    plt.show()
+    T, yout, xout, new_distances = qc1.run(rp1, 100, velocity, 100)
+    acc_true = qc_deqs.harmonic_solver(m_s, m_u, c_s, k_s, k_u, amp / 1000, wavelen, velocity, T)
+    plt.plot(T, acc_true, color='g')
+    plt.show()
+    print(acc_true.shape, new_distances.shape)
+    est_profile = qc1.inverse(acc_true, new_distances, velocity)
+
+    plt.plot(T, est_profile)
+    plt.ylim(-100, 100)
+    plt.show()

@@ -1,7 +1,7 @@
 import numpy
 from .roadprofile import RoadProfile
 import numpy as np
-from scipy import signal
+from scipy import signal, integrate
 from matplotlib import pyplot as plt
 
 class QC():
@@ -107,7 +107,7 @@ class QC():
             velocity = road_sample.length() / total_time #use average
         print(road_sample)
         #assume always starting from zero
-        times = np.concatenate((np.zeros(1), np.cumsum(np.diff(road_sample.get_distances()) / velocity)))
+        #times = np.concatenate((np.zeros(1), np.cumsum(np.diff(road_sample.get_distances()) / velocity)))
         times = np.concatenate((np.zeros(1), np.cumsum(np.diff(road_sample.get_distances()) / velocity)))
         print("Times[0] is {0}".format(times[0]))
         #if using average dx:
@@ -130,7 +130,7 @@ class QC():
 
         #print("T.shape is {0}, y.shape is {1}, x.shape is {2}".format(T.shape, yout.shape, xout.shape))
 
-        return T, yout, xout
+        return T, yout, xout, road_sample.get_distances()
 
 
 
@@ -138,6 +138,9 @@ class QC():
 
         #
         #return accs
+
+
+
 
     def inverse(self, accelerations, distances, velocities):
 
@@ -152,8 +155,54 @@ class QC():
         :return: `RoadProfile`
         """
 
+        # I think for now the only thing we could really do is:
+        #1. Numerically integrate x_s_dot_dot for x_s_dot and x_s
+        #2. Set up a state space using the first equation for x_s_dot_dot to solve for x_u and x_u_dot
+        # So for instance, rewrite: m_s*x_s_dot_dot + c_s(x_s_dot - x_u_dot) + k_s(x_s - x_u) = 0
+        # as: x_u_dot = (-k_s*x_u + y)/c_s, where y = m_s*x_s_dot_dot + c_s*x_s_dot + ks_*x_s
+        # then, estimate initial condition and solve for x_u and x_u_dot at each time step
+        #3. Estimate x_u_dot_dot from the time derivative of x_u_dot
+        #4. Use estimated values of x_s_dot, x_s, x_u_dot_dot, x_u_dot, and x_u to determine y
+        #E.G. plug in values at each time step to find:
+        # (m_u*x_u_dot_dot + c_s(x_u_dot - x_s_dot) + (k_u + k_s)*x_u - k_s*x_s)/k_s = y
+
+        #TODO: More research to see if there is a more elegant/better way to solve for the road profile (i.e. generate data and look at ways to go back to it)
+        if isinstance(velocities, (int, float)):
+            velocity = velocities
+            times = np.concatenate((np.zeros(1), np.cumsum(np.diff(distances) / velocity)))
+        else: #TODO: Figure out way to evenly space/interpolate between acceleration values
+            pass
+
+        #Step 1: Numerically integrate x_s_dot_dot to get x_s_dot, then numerically integrate x_s_dot to get x_s
+        x_s_dot = integrate.cumtrapz(times, accelerations, initial=0)
+        x_s = integrate.cumtrapz(times, x_s_dot, initial=0)
+
+        #Step 2:
+        a = -self.k2/self.c
+        b = 1
+        state_space = signal.StateSpace(a, b, a, b)
+        U = accelerations*1/self.c + x_s_dot + self.k2/self.c*x_s
+        T, x_u_dot, x_u = signal.lsim(state_space, U, times)
+        #print("X_u shape is {0}".format(x_u[2].shape))
+        #x_u_dot = a*x_u + U
+
+        #Step 3:
+
+        x_u_dot_dot = np.concatenate((np.zeros(1), np.diff(x_u_dot)/np.diff(times)))
+
+        #Step 4:
+
+        elevations = self.mu/self.k1*x_u_dot_dot + self.c/self.k1*(x_u_dot - x_s_dot) + (self.k1+self.k2)/self.k1*x_u - self.k2/self.k1*x_s
+
+        #plt.plot(times, elevations)
+        return elevations*1000
+
+
+
+
+
         #return road_profile
-        pass
+        #pass
 
 
 
