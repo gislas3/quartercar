@@ -130,7 +130,7 @@ class QC():
 
         #print("T.shape is {0}, y.shape is {1}, x.shape is {2}".format(T.shape, yout.shape, xout.shape))
 
-        return T, yout, xout, road_sample.get_distances()
+        return T, yout, xout, road_sample.get_distances(), road_sample.get_elevations()
 
 
 
@@ -142,7 +142,7 @@ class QC():
 
 
 
-    def inverse(self, accelerations, distances, velocities):
+    def inverse(self, accelerations, distances, velocities, sample_rate_hz=100):
 
         """
 
@@ -156,7 +156,7 @@ class QC():
         """
 
         # I think for now the only thing we could really do is:
-        #1. Numerically integrate x_s_dot_dot for x_s_dot and x_s
+        #1. Numerically integrate x_s_dot_dot to solve for x_s_dot and x_s
         #2. Set up a state space using the first equation for x_s_dot_dot to solve for x_u and x_u_dot
         # So for instance, rewrite: m_s*x_s_dot_dot + c_s(x_s_dot - x_u_dot) + k_s(x_s - x_u) = 0
         # as: x_u_dot = (-k_s*x_u + y)/c_s, where y = m_s*x_s_dot_dot + c_s*x_s_dot + ks_*x_s
@@ -164,24 +164,30 @@ class QC():
         #3. Estimate x_u_dot_dot from the time derivative of x_u_dot
         #4. Use estimated values of x_s_dot, x_s, x_u_dot_dot, x_u_dot, and x_u to determine y
         #E.G. plug in values at each time step to find:
-        # (m_u*x_u_dot_dot + c_s(x_u_dot - x_s_dot) + (k_u + k_s)*x_u - k_s*x_s)/k_s = y
+        # (m_u*x_u_dot_dot + c_s(x_u_dot - x_s_dot) + (k_u + k_s)*x_u - k_s*x_s)/k_u = y
 
         #TODO: More research to see if there is a more elegant/better way to solve for the road profile (i.e. generate data and look at ways to go back to it)
         if isinstance(velocities, (int, float)):
             velocity = velocities
             times = np.concatenate((np.zeros(1), np.cumsum(np.diff(distances) / velocity)))
         else: #TODO: Figure out way to evenly space/interpolate between acceleration values
-            pass
+
+            return None
 
         #Step 1: Numerically integrate x_s_dot_dot to get x_s_dot, then numerically integrate x_s_dot to get x_s
-        x_s_dot = integrate.cumtrapz(times, accelerations, initial=0)
-        x_s = integrate.cumtrapz(times, x_s_dot, initial=0)
+        sample_rate_per_meter = int(sample_rate_hz / velocity)
+        longest_wave_len = 91 #longest wavelength of interest
 
+        sos = signal.butter(10, 1 / longest_wave_len, 'highpass', fs=sample_rate_per_meter, output='sos')
+        x_s_dot = integrate.cumtrapz(accelerations, times, initial=0)
+        #x_s_dot = signal.sosfilt(sos, x_s_dot)
+        x_s = integrate.cumtrapz(x_s_dot, times, initial=0)
+        #x_s = signal.sosfilt(sos, x_s)
         #Step 2:
-        a = -self.k2/self.c
+        a = -self.k2/self.c #k2 = k_s/m_s, c = c_s/m_s, -k2/c = -k_s/c_s
         b = 1
         state_space = signal.StateSpace(a, b, a, b)
-        U = accelerations*1/self.c + x_s_dot + self.k2/self.c*x_s
+        U = accelerations*1/self.c + x_s_dot + self.k2/self.c*x_s #y = m_s/c_s*x_dot_dot + c_s*x_dot + k_s/c_s*x_s; c = c_s/m_s, 1/c = m_s/c_s; c_s/c_s = 1; k2 = k_s/m_s, c = c_s/m_s, k2/c = k_s/c_s
         T, x_u_dot, x_u = signal.lsim(state_space, U, times)
         #print("X_u shape is {0}".format(x_u[2].shape))
         #x_u_dot = a*x_u + U
@@ -192,10 +198,16 @@ class QC():
 
         #Step 4:
 
+        #(m_u*x_u_dot_dot + c_s(x_u_dot - x_s_dot) + (k_u + k_s)*x_u - k_s*x_s)/k_u = y
+        #mu = m_u/m_s, k1 = k_u/m_s, mu/k1 = m_u/k_u; c = c_s/m_s, k1 = k_u/m_s, c/k1 = c_s/k_u; k1 = k_u/m_s, k2 = k_s/m_s, (k1 + k2)/k1 = (k_u + k_s)/k_u; -k2 = -k_s/m_s, k1 = k_u/m_s, -k2/k1 = -k_s/k_u;
         elevations = self.mu/self.k1*x_u_dot_dot + self.c/self.k1*(x_u_dot - x_s_dot) + (self.k1+self.k2)/self.k1*x_u - self.k2/self.k1*x_s
 
+
         #plt.plot(times, elevations)
-        return elevations*1000
+        #let's try just filtering the profile at the end, with a high pass filter (in the spatial domain) with a cutoff of 91 meters
+
+        elevations_filt = signal.sosfilt(sos, elevations)
+        return elevations_filt*1000, x_s_dot, x_s, x_u, x_u_dot, x_u_dot_dot
 
 
 
