@@ -1,6 +1,6 @@
 from __future__ import division
 import numpy as np
-
+from scipy.interpolate import CubicSpline
 
 
 def make_sinusodal(wavelen, amplitude, profile_len, delta):
@@ -19,25 +19,31 @@ def make_sinusodal(wavelen, amplitude, profile_len, delta):
     return distances, prof_hts
 
 
-def make_gaussian(sigma, profile_len, delta, cutoff_freq):
+def make_gaussian(sigma, profile_len, delta, cutoff_freq, delta2=None, seed=None):
     """
     For methodology, see page 186 of: http://systemdesign.illinois.edu/publications/All08b.pdf
     :param sigma: The standard deviation of profile height for the gaussian distribution (in mm)
     :param profile_len: The length of the profile (in meters)
-    :param delta: The space between samples (in meters)
+    :param delta: The space between samples of the original profile (in meters)
     :param cutoff_freq: The cutoff spatial frequency to use in the filtering step (low pass filter)
+    :param delta2: The ultimate spacing of the final profile (in meters - for use in the final smoothing step)
+    :param seed: The seed to use for the random number generator (default: None, means use no seed)
     :return: Two arrays, one representing the distanace, another representing the profile heights
     """
-    num_samples = profile_len/delta
+    np.random.seed(seed)
+    num_samples = int(profile_len/delta)
     distances = np.linspace(0, profile_len, num_samples)
-    prof_hts = np.random.norm(0, sigma, num_samples)
+    orig_hts = np.random.normal(0, sigma, num_samples)
     a = np.exp(-2*np.pi*cutoff_freq*delta)
     b = 1 - np.exp(-2*np.pi*cutoff_freq*delta)
-    #TODO: Might want to generate fewer samples than distances, then use smoothing
-    for x in range(0, len(prof_hts)):
+    prof_hts = np.zeros(len(orig_hts))
+    for x in range(0, len(prof_hts)): #low pass filter
         if(x > 0):
-            prof_hts[x] = b*prof_hts[x] + a*prof_hts[x-1]
-    return distances, prof_hts
+            prof_hts[x] = b*orig_hts[x] + a*prof_hts[x-1]
+    cs = CubicSpline(distances, prof_hts)
+    new_dists = np.linspace(0, profile_len, int(profile_len/delta2))
+    new_heights = cs(new_dists)
+    return distances, orig_hts, prof_hts, new_dists, new_heights
 
 
 
@@ -68,7 +74,7 @@ def iri_test_profile(prof_len=11, delta=.25):
     #print(num_samples)
     xs = np.linspace(0, 11, num_samples)
     #print(xs)
-    disps = np.array(list(map(lambda x: test_profile_func(x), xs)))
+    disps = np.array(list(map(lambda x: iri_test_profile_func(x), xs)))
     #print(disps)
     return disps, xs
     # print(disps)

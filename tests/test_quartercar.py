@@ -6,6 +6,7 @@ from scipy.fftpack import fft
 from scipy import signal
 from tests import qc_diff_eq_solver_harmonic as qc_deqs
 import numpy as np
+import pandas as pd
 
 
 
@@ -59,7 +60,7 @@ def test_inverse1():
     print(acc_true.shape, new_distances.shape)
     est_profile, est_xs, est_xs_dot, est_xu, est_xu_dot, est_xu_dot_dot = qc1.inverse(acc_true, new_distances, velocity, sample_rate_hz)
 
-    make_plots = True
+    make_plots = False
     make_fft = False
     use_dist = False
     if make_plots:
@@ -170,4 +171,64 @@ def test_inverse1():
 
 
 
-    assert(False)
+    #assert(False)
+
+def test_run_gaussian():
+    sigma = 8  # 8 mm
+    profile_len, delta, cutoff_freq, delta2, seed = 100, .1, .15, .01, 55
+    dists, orig_hts, low_pass_hts, final_dists, final_heights = mp.make_gaussian(sigma, profile_len, delta,
+                                                                                cutoff_freq, delta2, seed)
+
+
+    rp1 = rp.RoadProfile(final_dists, final_heights)
+    velocity = 10  # 10 m/s
+    m_s, m_u, c_s, k_s, k_u = 208, 28, 1300, 18709, 127200  # QC parameters
+    qc1 = qc.QC(m_s, m_u, c_s, k_s, k_u)
+    T, yout, xout, new_distances, new_elevations = qc1.run(rp1, 100, velocity, 100)
+    plt.plot(T, yout[:, -1])
+    plt.title("Sprung mass acceleration from gaussian input")
+    plt.show()
+
+    #assert(False)
+
+def test_inverse_gaussian():
+    sigma = 8  # 8 mm
+    profile_len, delta, cutoff_freq, delta2, seed = 100, .1, .15, .01, 55
+    dists, orig_hts, low_pass_hts, final_dists, final_heights = mp.make_gaussian(sigma, profile_len, delta,
+                                                                                cutoff_freq, delta2, seed)
+
+
+    rp1 = rp.RoadProfile(final_dists, final_heights)
+    velocity = 10  # 10 m/s
+    m_s, m_u, c_s, k_s, k_u = 208, 28, 1300, 18709, 127200  # QC parameters
+    qc1 = qc.QC(m_s, m_u, c_s, k_s, k_u)
+    sample_rate_hz = 500
+    T, yout, xout, new_distances, new_elevations = qc1.run(rp1, 100, velocity, sample_rate_hz)
+    est_profile, est_xs, est_xs_dot, est_xu, est_xu_dot, est_xu_dot_dot = qc1.inverse(yout[:, -1], new_distances, velocity,
+                                                                                      sample_rate_hz)
+
+
+    iri_full = rp1.to_iri()
+    rp_est = rp.RoadProfile(new_distances, est_profile)
+    iri_orig = rp.RoadProfile(new_distances, new_elevations).to_iri()
+    iri_est = rp_est.to_iri()
+    plt.plot(new_distances, new_elevations, color='g')
+    plt.plot(new_distances, est_profile, color='r')
+    #data1 = {"distances": new_distances, "elevations": new_elevations}
+    #df1 = pd.DataFrame(data1)
+    #data2 = {"distances": new_distances, "elevations": est_profile}
+    #df2 = pd.DataFrame(data2)
+    #df1.to_csv("/Users/gregoryislas/Documents/Mobilized/sampled_profile", index=False)
+    #df2.to_csv("/Users/gregoryislas/Documents/Mobilized/estimated_profile", index=False)
+    plt.title("Estimated profile (r) (IRI={1}) and sampled input (IRI={2}, real={3}) (g), SR = {0}HZ".format(sample_rate_hz, np.round(iri_est, 3), np.round(iri_orig, 3), np.round(iri_full, 3)))
+    plt.show()
+
+
+
+    #plt.plot(T, yout[:, -1])
+    #plt.title("Sprung mass acceleration from gaussian input")
+    #plt.show()
+
+    #assert(False)
+
+

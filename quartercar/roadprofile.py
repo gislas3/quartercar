@@ -196,11 +196,12 @@ class RoadProfile():
         # iri_dict = {}  # store the computed iri values
         curr_sum = 0  # current numerator for the calculation
         n = 0  # current denominator for the calculation
-
+        #assumption is that we've already been evenly spaced
+        dx = np.diff(self.distances)[0]
 
         x1, smooth_slps = self.compute_smoothed_slopes()
         if(x1 is not None):
-            ex_a = expm(a_mat * .25 / vel)  # just use .25 as sample rate
+            ex_a = expm(a_mat * dx / vel)  # just use .25 as sample rate
             term2 = np.matmul(np.matmul(inv_a, (ex_a - np.eye(4))), b_mat)
 
             for ind in range(0, len(smooth_slps)):  # again, for more details, see Sayers paper

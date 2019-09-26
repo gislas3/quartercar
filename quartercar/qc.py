@@ -206,7 +206,8 @@ class QC():
         #plt.plot(times, elevations)
         #let's try just filtering the profile at the end, with a high pass filter (in the spatial domain) with a cutoff of 91 meters
 
-        elevations_filt = signal.sosfilt(sos, elevations)
+        #elevations_filt = signal.sosfilt(sos, elevations)
+        elevations_filt = elevations
         return elevations_filt*1000, x_s_dot, x_s, x_u, x_u_dot, x_u_dot_dot
 
 
