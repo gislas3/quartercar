@@ -10,8 +10,8 @@ def harmonic_solver(m_s, m_u, c_s, k_s, k_u, amplitude, wavelen, velocity, T):
     :param m_u: The unsprung mass (in kg)
     :param c_s: The damping coefficient
     :param k_s: The stiffness of the suspension spring
-    :param k_u: The stiffneess of the tire spring
-    :param amplitude: The apmlitude of the exciting force (i.e. road profile) in meters
+    :param k_u: The stiffness of the tire spring
+    :param amplitude: The apmplitude of the exciting force (i.e. road profile) in meters
     :param wavelen: The wavelength (in meters) of the exciting force
     :param velocity: The velocity the car traveled over (this is necessary to get the proper spacing/frequency in the time domain)
     :param T: The times to output the sprung mass acceleration at

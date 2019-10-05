@@ -7,22 +7,25 @@ from scipy.linalg import expm, inv
 
 class RoadProfile():
 
-    def __init__(self, distances, elevations):
+    def __init__(self, distances, elevations, filtered=False):
         """
         :param distances: A list of distance from the starting point of the profile (in units meters)
         :param elevations: A list of elevations (in mm)
+        :param filtered: A boolean representing whether the profile has already been subjected to a moving average filter (default: False)
         :raises: ValueError if the distances are not increasing and any two distances have the same value
         :raises: ValueError if the elevations and distances are *not* the same length
         :raises: ValueError if there are less than 2 data points 
         """
         self.elevations = elevations
         self.distances = distances
+        self.filtered = filtered
+        self.dx_constant = np.allclose(np.diff(np.diff(self.distances)), np.zeros(len(self.distances[:-2]))) #Whether or not dx is constant
 
         if not len(elevations) == len(distances):
-            raise ValueError(f'Expected length of elevations (${len(elevations)}) and distances (${distances}) to be equal')
+            raise ValueError('Expected length of elevations (${0}) and distances (${1}) to be equal'.format(len(elevations), len(distances)))
 
         if len(elevations) < 2:
-            raise ValueError(f'Expected at least two data points but received ${len(elevations)}')
+            raise ValueError('Expected at least two data points but received ${0}'.format(len(elevations)))
 
         if not np.all(np.diff(distances) > 0):
             #print("Np.diff(distances) > 0 is {0}".format(np.diff(distances) > 0 ))
@@ -40,11 +43,12 @@ class RoadProfile():
 
         return len(self.distances) == len(other.distances) and \
                 np.allclose(self.distances, other.distances) and \
-                np.allclose(self.elevations, other.elevations)
+                np.allclose(self.elevations, other.elevations) and \
+                self.filtered == other.filtered
 
 
     def __repr__(self):
-        return f'RoadProfile(${self.distances}, ${self.elevations})'
+        return 'RoadProfile(${0}, ${1})'.format(self.distances, self.elevations)
 
 
     def get_elevations(self):
@@ -53,6 +57,52 @@ class RoadProfile():
 
     def get_distances(self):
         return self.distances
+
+    def length(self):
+        """
+        :return: The length of the entire profile in meters
+        """
+        return self.distances[-1]
+
+    def split(self, distance):
+        """
+        :param distance: The distance in meters in which the road profile should be split
+        :return: A list of RoadProfile split via distance
+        """
+        if(distance <= self.distances[0] or distance >= self.length()):
+            return [RoadProfile(self.distances, self.elevations, self.filtered)]
+
+        split_index = np.where(self.distances > distance)[0][0]
+        return [RoadProfile(self.distances[:split_index], self.elevations[:split_index]), RoadProfile(self.distances[split_index-1:], self.elevations[split_index-1:])]
+
+
+    def moving_avg_filter(self, baselen=.25):
+        """
+        Filters a road profile using a forward moving average filter of length baselen (in meters)
+        :param baselen: The length in meters of the moving average window
+        :return: A new road profile with the filtered elevation values
+        """
+        if self.dx_constant:
+            dx = np.diff(self.distances)[0]
+            k = max(int(baselen/dx + .5), 1)
+            if k <= 1:
+                return RoadProfile(self.distances, self.elevations, True)
+            else:
+
+                start, end = 0, len(self.elevations) - k + 1
+                filtered_elevations = np.zeros(end)
+                while start < k:
+                    filtered_elevations = filtered_elevations + self.elevations[start:end]
+                    start += 1
+                    end += 1
+                filtered_elevations = filtered_elevations/k
+                return RoadProfile(self.distances[:len(self.elevations) - k + 1], filtered_elevations, True)
+
+        else: #TODO: Figure out moving average filter for unevenly spaced profile
+            return None
+
+
+
 
 
     def car_sample(self, distances, velocities, sample_rate_hz=100):
@@ -72,7 +122,7 @@ class RoadProfile():
 
         elif hasattr(velocities, '__len__') and hasattr(distances, '__len__'):
             if not len(velocities) == len(distances):
-                raise ValueError(f'Distances and velocities are not the same length (${len(distances)} vs ${len(velocities)})')
+                raise ValueError('Distances and velocities are not the same length (${0} vs ${1})'.format(len(distances), len(velocities)))
 
             #What we want to do:
             #1. Get distance for each sample rate of the vehicle
@@ -106,6 +156,7 @@ class RoadProfile():
         return new_profile
 
 
+
     def space_evenly(self, distance=None):
         """
         Returns a new `RoadProfile` where the distances are evenly spaced.
@@ -114,7 +165,7 @@ class RoadProfile():
         """
 
         if distance is None:
-            min_dist = min(np.min(np.diff(self.distances)), .25) #for now, we are going to interpolate at min distance or 300 mm
+            min_dist = min(np.min(np.diff(self.distances)), .3) #for now, we are going to interpolate at min distance or 300 mm
             #TODO: Probably need some check in case there are a few distances closely spaced, and others not so
         else:
             min_dist = min(distance, self.length())
@@ -125,61 +176,49 @@ class RoadProfile():
         return RoadProfile(final_dists, final_elevs)
 
 
-    def length(self):
-        """
-        :return: The length of the entire profile in meters
-        """
-        return self.distances[-1]
 
-    def split(self, distance):
+    def compute_smoothed_slopes(self, distances, elevations, base_len=.25, init_length=11):
         """
-        :param distance: The distance in meters in which the road profile should be split
-        :return: A list of RoadProfile split via distance
-        """
-        pass
-
-
-    def compute_smoothed_slopes(self, base_len=.25, init_length=11):
-        """
-
+        :param distances: The distances from the beginning of the profile in meters
+        :param elevations: The elevations from the beginning of the profile in meters
         :param base_len: The baselength of the moving average filter to compute the smoothed road profile, in meters (default = .25 meters = 250 mm)
         :init_length: The length of the initial profile as to which to initialize the IRI equation
         :return: A numpy array of smoothed profile height slopes
         """
-        list_slps = []
-        total_dist = 0
-        x1 = None
-        prev_dist = 0
-        total_dist = 0
-        for x in range(0, len(self.elevations)):  # compute the moving average filter of the slopes
+        #We are going to assume that the profile has already been spaced evenly before this function has been called
+       #list_slps = []
+       #total_dist = 0
+       #x1 = None
+       #prev_dist = 0
+       #total_dist = 0
+        dx = np.diff(distances)[0]
+        if self.filtered:
+            base_len = 0 #override base length if it's already been filtered
+        k = max(1, int(base_len/dx + .5))
+        slopes = (elevations[k:] - elevations[:-k])/(k*dx)
 
-            denom = self.distances[x] - prev_dist
-            total_dist += denom
-            if(total_dist < init_length and total_dist + self.distances[x] >= init_length):
-                x1 = np.array([[(self.elevations[x] - self.elevations[0])/total_dist], [0], [(self.elevations[x] - self.elevations[0])/total_dist ], [0]])
-                #print(x1)
-            next_ind = x + 1
+        x1_ind =  min(int(init_length/dx + .5), len(elevations)-1)
+        xinit = (elevations[x1_ind] - elevations[0])/(dx*x1_ind)
+        x1 = np.array([[xinit], [0], [xinit], [0]])
 
-            while(next_ind < len(self.elevations) and denom < base_len):
-                denom += self.distances[next_ind] - self.distances[next_ind-1]
-                next_ind += 1
 
-            if(next_ind < len(self.elevations)):
-                smoothed_slope = (self.elevations[next_ind] - self.elevations[x])/denom
-                #print("Smoothed slope is {0}".format(denom))
-                list_slps.append(smoothed_slope)
-            prev_dist = self.distances[x]
-        #print("List slps is {0}".format(list_slps))
         #TODO: Make check to ensure that sample rate is high enough
-        return x1, np.array(list_slps)
+        return x1, slopes
 
 
     def to_iri(self):
         """
+        Computes the IRI over the entire road profile
+        :param filter: Whether or not to filter the road profile using the standard IRI filter before computing the IRI (default: True)
         :return: The IRI value over the entire road profile
         """
         # parameters taken from Sayers paper, correspond to Golden Car simulation parameters, more details
         # can be found here: http://onlinepubs.trb.org/Onlinepubs/trr/1995/1501/1501-001.pdf
+        if not self.dx_constant:
+            new_profile = self.space_evenly()
+            distances, elevations = new_profile.get_distances(), new_profile.get_elevations()
+        else:
+            distances, elevations = self.get_distances(), self.get_elevations()
         c = 6.0
         k_1 = 653
         k_2 = 63.3
@@ -197,9 +236,9 @@ class RoadProfile():
         curr_sum = 0  # current numerator for the calculation
         n = 0  # current denominator for the calculation
         #assumption is that we've already been evenly spaced
-        dx = np.diff(self.distances)[0]
+        dx = np.diff(distances)[0]
+        x1, smooth_slps = self.compute_smoothed_slopes(distances, elevations)
 
-        x1, smooth_slps = self.compute_smoothed_slopes()
         if(x1 is not None):
             ex_a = expm(a_mat * dx / vel)  # just use .25 as sample rate
             term2 = np.matmul(np.matmul(inv_a, (ex_a - np.eye(4))), b_mat)
@@ -216,7 +255,8 @@ class RoadProfile():
                 n += 1
 
         to_ret_iri = None
-        if (n > 0 and curr_sum > 0):
+
+        if (n > 0):
             to_ret_iri = min(curr_sum / n, 20)
         return to_ret_iri
 

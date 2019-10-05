@@ -52,23 +52,8 @@ class QC():
             x0 = np.array([[init_val/1000], [0], [init_val/1000], [0]])
         return x0
 
-    def get_time_array(self, road_profile, velocities):
-        """
 
-        :param road_profile: The `RoadProfile` instance that contains the information about the road profile in question
-        :param velocities: The instantaneous velocity of the car at each point of the road profile
-        :return:
-        """
-        elevations, dists = road_profile.get_elevations(), road_profile.get_distances()
-        diffs = np.diff(dists)
-        dts = diffs/velocities
-
-
-
-
-
-
-    def run(self, road_profile,  distances, velocities, sample_rate_hz=100):
+    def run(self, road_profile, distances, velocities, sample_rate_hz=100):
         """
         This is where we generate the acceleration values from the road profile, running the entire QC simulation
 
@@ -82,11 +67,11 @@ class QC():
         a = np.array(
             [[0, 1, 0, 0], [-self.k2, -self.c, self.k2, self.c], [0, 0, 0, 1], [self.k2 / self.mu, self.c / self.mu, -(self.k1 + self.k2) / self.mu, -self.c / self.mu]])
 
-        print("A shape is {0}".format(a.shape))
+        #print("A shape is {0}".format(a.shape))
         b = np.array([[0], [0], [0], [self.k1 / self.mu]])
-        print("B shape is {0}".format(b.shape))
+        #print("B shape is {0}".format(b.shape))
         c = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1], [-self.k2, -self.c, self.k2, self.c]])
-        print("C shape is {0}".format(c.shape))
+        #print("C shape is {0}".format(c.shape))
         #More information about the state space can be found in http://onlinepubs.trb.org/Onlinepubs/trr/1995/1501/1501-001.pdf
         #Basically, we just want dx/dt = Ax + bu, y = x
         state_space = signal.StateSpace(a, b, c, None)
@@ -105,11 +90,11 @@ class QC():
             total_time = np.sum(distances / velocities)
             road_sample = road_sample.space_evenly(dx) #resample with even spacing in between consecutive samples
             velocity = road_sample.length() / total_time #use average
-        print(road_sample)
+        #print(road_sample)
         #assume always starting from zero
         #times = np.concatenate((np.zeros(1), np.cumsum(np.diff(road_sample.get_distances()) / velocity)))
         times = np.concatenate((np.zeros(1), np.cumsum(np.diff(road_sample.get_distances()) / velocity)))
-        print("Times[0] is {0}".format(times[0]))
+        #print("Times[0] is {0}".format(times[0]))
         #if using average dx:
 
         #if using min dx:

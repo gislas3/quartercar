@@ -72,11 +72,11 @@ def iri_test_profile(prof_len=11, delta=.25):
     #dx = 0.125
     num_samples = int(prof_len/delta) + 1
     #print(num_samples)
-    xs = np.linspace(0, 11, num_samples)
+    xs = np.linspace(0, prof_len, num_samples)
     #print(xs)
     disps = np.array(list(map(lambda x: iri_test_profile_func(x), xs)))
     #print(disps)
-    return disps, xs
+    return xs, disps*10
     # print(disps)
    #slopes = np.diff(disps) / dx
     #print(slopes)
