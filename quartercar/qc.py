@@ -12,13 +12,17 @@ class QC():
       2) reverses the calculation to generate a `RoadProfile` from accelerations, distances and velocities.
     """
 
-    def __init__(self, m_s=0, m_u=0, c_s=0, k_s=0, k_u=0): #TODO: Put in all different car parameters (with defaults) as constructor arguments
+    def __init__(self, m_s=None, m_u=None, c_s=None, k_s=None, k_u=None, epsilon=None, omega_s=None, omega_u=None, xi=None): #TODO: Put in all different car parameters (with defaults) as constructor arguments
         """
         :param c_s: The suspension damping rate (assumes units N*s/m)
         :param k_s: The suspension spring constant (assumes units N/m)
         :param k_l: The tire spring constant (assumes units N/m)
         :param m_s: The sprung mass (assumes units kg)
         :param m_u: The unsprung mass (assumes units kg)
+        :param epsilon: Defined as m_s/m_u
+        :param omega_s: Defined as sqrt(k_s/m_s)
+        :param omega_u: Defined as sqrt(k_u/m_u)
+        :param xi: Defined as c_s/(2*m_s*omega_s)
         """
         #self.c_s = c_s #suspension damping rate (in N * s/m)
         #self.k_s = k_s #suspension spring constant (in units N/m)
@@ -26,13 +30,40 @@ class QC():
         #self.m_s  = m_s #sprung mass (in units kg)
         #self.m_u = m_u #unspring mass (in units kg)
         #TODO: Check to make sure parameters valid
-        self.m_s = m_s
-        #divide coefficients by sprung mass to make for easier computation into IRI algorithm
-        #Can always get back originals by multiplying by m_s
-        self.c = c_s/self.m_s
-        self.k1 = k_u/self.m_s
-        self.k2 = k_s/self.m_s
-        self.mu = m_u/self.m_s
+        if m_s is not None:
+            self.m_s = m_s
+            #divide coefficients by sprung mass to make for easier computation into IRI algorithm
+            #Can always get back originals by multiplying by m_s
+            self.c = c_s/self.m_s
+            self.k1 = k_u/self.m_s
+            self.k2 = k_s/self.m_s
+            self.mu = m_u/self.m_s
+        else:
+            if epsilon is None: #Use average values if epsilon is None
+                epsilon = 5
+                omega_s = 1
+                omega_u = 10
+                xi = .55
+                #Aside: According to page 938 of Vehicle Dynamics, 1st Edition the average and min practical values
+                # for the above respective parameters are as follows (IMPORTANT: I believe these ratios are for lbs/inch):
+                #epsilon: avg = 3 to 8, min = 2, max = 20
+                #omega_s: avg = 1, min = .2, max = 1
+                #omega_u: avg = 10, min = 2, max = 20
+                #xi: avg = .55, min = 0, max = 2
+
+            self.c = xi * 2 * omega_s  # This is c_s/(2*m_s*omega_s) * 2*omega_s = c_s/m_s
+            self.k1 = omega_u ** 2 * 1 / epsilon  # This is sqrt(k_u/m_u)**2 * 1/(m_s/m_u) = k_u/m_s
+            self.k2 = omega_s ** 2  # This is sqrt(k_s/m_s)**2 = k_s/m_s
+            self.mu = 1 / epsilon  # This is 1/(m_s/m_u) = m_u/m_s
+
+
+
+
+
+
+
+
+
 
 
     #need a method here to estimate initial state
