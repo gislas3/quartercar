@@ -21,7 +21,7 @@ def test_sinusodial1(): #TODO - Test varied velocities
 
     #print()
 
-    y_true =  qc_deqs.harmonic_solver(m_s, m_u, c_s, k_s, k_u, amp/1000, wavelen, velocity, T)
+    y_true = qc_deqs.harmonic_solver(m_s, m_u, c_s, k_s, k_u, amp/1000, wavelen, velocity, T)
 
     #Uncomment the following 3 lines to view the plot
     #plt.plot(T, yout[:, -1], color='r')

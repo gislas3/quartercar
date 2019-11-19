@@ -24,7 +24,7 @@ def inverse1():
     #plt.plot(T, acc_true, color='g')
     #plt.show()
 
-    est_profile, est_xs, est_xs_dot, est_xu, est_xu_dot, est_xu_dot_dot = qc1.inverse(acc_true, new_distances, velocity, sample_rate_hz)
+    est_profile, est_xs_dot, est_xs, est_xu, est_xu_dot, est_xu_dot_dot = qc1.inverse(acc_true, new_distances, velocity, sample_rate_hz)
 
     make_plots = True
     make_fft = False
@@ -197,7 +197,8 @@ def test_inverse_gaussian():
 
     #assert(False)
 
-if __name__ == 'main':
-    inverse1()
-    run_gaussian()
-    test_inverse_gaussian()
+#if __name__ == 'main':
+print("NAME IS MAIN")
+inverse1()
+run_gaussian()
+test_inverse_gaussian()

@@ -77,7 +77,7 @@ for velocity in range(5, 45, 5):
             road_profile_proxy_filt = rp.RoadProfile(new_distances, signal.sosfilt(sos, displacements))
             pred_iri_filt = road_profile_proxy.to_iri()
             output_str += "{0},{1},{2},{3}\n".format(x, true_iri, pred_iri, pred_iri_filt)
-        with open("/Users/gregoryislas/Documents/Mobilized/IRI_Exp_Files/Vel_{0}_Sr_{1}.csv".format(velocity, sample_rate), "w") as f:
+        with open("data/IRI_Exp_Files/Vel_{0}_Sr_{1}.csv".format(velocity, sample_rate), "w") as f:
             f.write(output_str)
         print("Finished CSV for velocity {0}, sample rate {1}".format(velocity, sample_rate))
 

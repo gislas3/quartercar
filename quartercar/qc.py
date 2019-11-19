@@ -112,7 +112,8 @@ class QC():
         #TODO: Appropriate error checking below
 
         # Get the points touched by the car at the given velocity, distance car traveled at velocity, and sample rate
-        road_sample = road_profile.car_sample( distances,velocities,sample_rate_hz)
+        road_sample = road_profile.car_sample(distances,velocities,sample_rate_hz)
+        road_sample = road_sample.moving_avg_filter()
         if isinstance(velocities, (int, float)) and isinstance(distances, (int, float)):
             #should already be spaced evenly
             velocity = velocities
@@ -162,7 +163,7 @@ class QC():
 
         """
 
-        TODO: Still need to figure out the best way to do this
+
         :param accelerations: An array of vertical accelerations in (m/s^2) (assumes that preprocessing step,
             subtracting gravity/accounting for orientation has already occurred)
         :param distances: An array that contains the distance (in mm) from start of measurements
@@ -182,7 +183,7 @@ class QC():
         #E.G. plug in values at each time step to find:
         # (m_u*x_u_dot_dot + c_s(x_u_dot - x_s_dot) + (k_u + k_s)*x_u - k_s*x_s)/k_u = y
 
-        #TODO: More research to see if there is a more elegant/better way to solve for the road profile (i.e. generate data and look at ways to go back to it)
+
         if isinstance(velocities, (int, float)):
             velocity = velocities
             times = np.concatenate((np.zeros(1), np.cumsum(np.diff(distances) / velocity)))
