@@ -187,9 +187,21 @@ class QC():
         if isinstance(velocities, (int, float)):
             velocity = velocities
             times = np.concatenate((np.zeros(1), np.cumsum(np.diff(distances) / velocity)))
-        else: #TODO: Figure out way to evenly space/interpolate between acceleration values
+        else: #Evenly space/interpolate between acceleration values
+    		delta = 0.25 #desired space between measurements eg. 250 mm, or 300 mm
 
-            return None
+			length_of_trip = int(distances[-1]) #the last measurement is the total length of the trip
+			number_of_samples = int(length_of_trip/delta) + 1
+			even_dists = np.linspace(0, length_of_trip, number_of_samples)
+			even_acc = np.interp(even_dists, distances, part['Acc_Z'])
+
+			# We choose the smallest speed for simulation
+			min_velocity = min(velocities)
+			if min_velocity == 0:
+				min_velocity = 10 #in m/s
+				
+			times = np.concatenate((np.zeros(1), np.cumsum(np.diff(even_dists) / min_velocity)))#times measured from start in seconds
+			
 
         #Step 1: Numerically integrate x_s_dot_dot to get x_s_dot, then numerically integrate x_s_dot to get x_s
         sample_rate_per_meter = int(sample_rate_hz / velocity)
