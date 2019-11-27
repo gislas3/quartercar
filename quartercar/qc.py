@@ -159,7 +159,7 @@ class QC():
 
 
 
-    def inverse(self, accelerations, distances, velocities, sample_rate_hz=100):
+    def inverse(self, accelerations, distances, velocities, sample_rate_hz=100, interp_dx=.25, interp_type='linear'):
 
         """
 
@@ -168,7 +168,7 @@ class QC():
             subtracting gravity/accounting for orientation has already occurred)
         :param distances: An array that contains the distance (in mm) from start of measurements
         :param velocities: An array that contains the instantaneous velocity of the car at each distance
-
+        :param: interp_dx: The parameter specifying what the spacing should be if interpolating the acceleration series
         :return: `RoadProfile`
         """
 
@@ -188,11 +188,18 @@ class QC():
             velocity = velocities
             times = np.concatenate((np.zeros(1), np.cumsum(np.diff(distances) / velocity)))
         else:
-            delta = 0.25  # desired space between measurements eg. 250 mm, or 300 mm
+            if interp_dx is None:
+                delta = .25
+                #pass #TODO: Create function for choosing a dx based on the spacing of the data
+            else:
+                delta = interp_dx  # desired space between measurements eg. 250 mm, or 300 mm
 
-            length_of_trip = int(distances[-1])  # the last measurement is the total length of the trip
+            length_of_trip = distances[-1] # the last measurement is the total length of the trip
             number_of_samples = int(length_of_trip / delta) + 1
             even_dists = np.linspace(0, length_of_trip, number_of_samples)
+            #print("Even dists is {0}".format(even_dists))
+            if interp_type == 'linear':
+                pass #TODO: Implement cubic spline method
             even_acc = np.interp(even_dists, distances, accelerations)
 
             # We choose the smallest speed for simulation
@@ -241,7 +248,7 @@ class QC():
 
         #elevations_filt = signal.sosfilt(sos, elevations)
         elevations_filt = elevations
-        return elevations_filt*1000, x_s_dot, x_s, x_u, x_u_dot, x_u_dot_dot
+        return elevations_filt*1000, x_s_dot, x_s, x_u, x_u_dot, x_u_dot_dot, accelerations
 
 
 

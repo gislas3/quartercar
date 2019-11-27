@@ -24,9 +24,9 @@ def inverse1():
     #plt.plot(T, acc_true, color='g')
     #plt.show()
 
-    est_profile, est_xs_dot, est_xs, est_xu, est_xu_dot, est_xu_dot_dot = qc1.inverse(acc_true, new_distances, velocity, sample_rate_hz)
+    est_profile, est_xs_dot, est_xs, est_xu, est_xu_dot, est_xu_dot_dot, acc = qc1.inverse(acc_true, new_distances, velocity, sample_rate_hz)
 
-    make_plots = True
+    make_plots = False
     make_fft = False
     use_dist = False
     if make_plots:
@@ -158,19 +158,19 @@ def run_gaussian():
     #assert(False)
 
 def test_inverse_gaussian():
-    sigma = 8  # 8 mm
-    profile_len, delta, cutoff_freq, delta2, seed = 100, .1, .15, .01, 55
-    dists, orig_hts, low_pass_hts, final_dists, final_heights = mp.make_gaussian(sigma, profile_len, delta,
-                                                                                cutoff_freq, delta2, seed)
+    #sigma = 8  # 8 mm
+    #profile_len, delta, cutoff_freq, delta2, seed = 100, .1, .15, .01, 55
+    #dists, orig_hts, low_pass_hts, final_dists, final_heights = mp.make_gaussian(sigma, profile_len, delta,
+    #                                                                            cutoff_freq, delta2, seed)
 
-
+    final_dists, final_heights = mp.make_profile_from_psd('A', 'sine', .1, 100)
     rp1 = rp.RoadProfile(final_dists, final_heights)
     velocity = 10  # 10 m/s
     m_s, m_u, c_s, k_s, k_u = 208, 28, 1300, 18709, 127200  # QC parameters
     qc1 = qc.QC(m_s, m_u, c_s, k_s, k_u)
     sample_rate_hz = 500
     T, yout, xout, new_distances, new_elevations = qc1.run(rp1, 100, velocity, sample_rate_hz)
-    est_profile, est_xs, est_xs_dot, est_xu, est_xu_dot, est_xu_dot_dot = qc1.inverse(yout[:, -1], new_distances, velocity,
+    est_profile, est_xs, est_xs_dot, est_xu, est_xu_dot, est_xu_dot_dot, acc = qc1.inverse(yout[:, -1], new_distances, velocity,
                                                                                       sample_rate_hz)
 
 

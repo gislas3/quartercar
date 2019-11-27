@@ -74,7 +74,7 @@ def test_inverse():
     qc1 = qc.QC(m_s, m_u, c_s, k_s, k_u)
     sample_rate_hz = 500
     T, yout, xout, new_distances, new_elevations = qc1.run(rp1, 100, velocity, sample_rate_hz)
-    est_profile, est_xs, est_xs_dot, est_xu, est_xu_dot, est_xu_dot_dot = qc1.inverse(yout[:, -1], new_distances, velocity,
+    est_profile, est_xs, est_xs_dot, est_xu, est_xu_dot, est_xu_dot_dot, acc = qc1.inverse(yout[:, -1], new_distances, velocity,
                                                                                       sample_rate_hz)
     assert(len(est_profile) == len(yout[:, -1]))
 #

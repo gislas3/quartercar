@@ -2,6 +2,7 @@ import argparse
 from quartercar import qc, roadprofile
 from tests import make_profile
 import numpy as np
+import pandas as pd
 
 #What do we want...
 
@@ -23,33 +24,59 @@ import numpy as np
 
 #Eventually, want to specify split of road profiles, and sample rate for each one
 
-def make_road_profile_list(prof_type, num_profiles, dx, length, seed):
+def make_road_profile_list(prof_type, num_profiles, dx, length, seed, flag, path):
     list_profiles = []
     for x in range(0, num_profiles):
         distances, elevations = make_profile.make_profile_from_psd(prof_type, 'sine', dx/2, length, seed)
         profile = roadprofile.RoadProfile(distances, elevations)
         list_profiles.append(profile)
+        if flag:
+            df = pd.DataFrame(data={"distances": distances, "elevations": elevations})
+            df.to_csv("{0}/{1}_{2}_profile".format(path, prof_type, x), index=False)
     return list_profiles
 
-def run_simulations(list_profiles, car, dx, velocity, sample_rate_hz):
+def run_simulations(prof_type, list_profiles, car, dx, velocity, sample_rate_hz, flag, path):
     list_accs = []
     for p in list_profiles:
         T, yout, xout, new_distances, new_elevations = car.run(p, dx, velocity, sample_rate_hz)
-        list_accs.append(yout[:, -1])
-    return new_distances, list_accs
+        accs = yout[:, -1]
+        if flag:
+            df = pd.DataFrame(data={"distances": new_distances, "accelerations": accs})
+            df.to_csv("{0}/{1}_{2}_accelerations".format(path, prof_type, x), index=False)
+        list_accs.append((new_distances, accs))
+    return list_accs
 
-def downsample(dists, accs, dx):
-    new_dists, new_accs = [0], [accs[0]] #should always start at 0
-    curr_dist = dx
-    for x in range(0, len(dists)):
-        d = dists[x]
-        acc = accs[x]
-        if d == curr_dist:
-            new_dists.append(curr_dist)
-            new_accs.append(acc)
-            curr_dist += dx
-    return np.array(new_dists), np.array(new_accs)
+def downsample(list_accs, dx):
+    downsampled_accs = []
+    for x in range(0, len(list_accs)):
+        new_dists, new_accs = [0], [list_accs[x][1][0]] #should always start at 0
+        dists, accs = list_accs[x][0], list_accs[x][1]
+        curr_dist = dx
+        for y in range(0, len(dists)):
+            d = dists[y]
+            acc = accs[y]
+            if d >= curr_dist: #Not assuming that dx is a multiple of the sampling interval
+                new_dists.append(curr_dist)
+                new_accs.append(acc)
+                curr_dist += dx
+        downsampled_accs.append((np.array(new_dists), np.array(new_accs)))
 
+    return downsampled_accs
+
+def run_inverses(prof_type, ds_list, car, velocity, sample_rate, dx, interp, flag, path):
+    inverse_list = []
+    for x in range(0, len(ds_list)):
+        dists, accs = ds_list[x][0], ds_list[x][1]
+        packed_vals = car.inverse(accs, dists, [velocity]*len(dists), sample_rate, dx, interp)
+        #inverse_list.append(())
+        if flag:
+            new_dists = np.arange(0, dists[-1], dx)
+            #print("new dists is {0}".format(new_dists))
+            #print("len new dists is {0}, elevations is {1}".format(len(new_dists), len(packed_vals[0])))
+            df_inv_profile = pd.DataFrame(data={'distances': new_dists, "elevations": packed_vals[0]})
+            df_inv_profile.to_csv("{0}/{1}_{2}_{3}_interp_profile".format(path, prof_type, x, interp), index=False)
+            df_inv_accs = pd.DataFrame(data={'distances': new_dists, "accelerations": packed_vals[-1]})
+            df_inv_accs.to_csv("{0}/{1}_{2}_{3}_interp_accs".format(path, prof_type, x, interp), index=False)
 
 
 
@@ -100,6 +127,9 @@ parser.add_argument('--ds', '--downsample', '--down_sample_rate', nargs='?', typ
 parser.add_argument('--seed', '--random_seed', nargs='?', type=int, default=55, const=55,
                     metavar='N', help='The random seed to use so results can be reproduced')
 
+parser.add_argument('--write', '--write_to_file', nargs='?', type=int, default=1, const=1,
+                    metavar='N', help='Flag denoting whether or not to write the outputs to a file')
+
 parser.add_argument('-l', '--length', '--profile_length', nargs='?', type=float, default=100, const=100,
                     metavar='N', help='The length (in m) of the profiles to generate')
 
@@ -121,27 +151,31 @@ prof_dict = {}
 for x in range(0, len(profile_types)):
     t = profile_types[x]
     n = profile_nums[x]
-    prof_dict[t] = make_road_profile_list(t, n, args.dx, args.length, args.seed)
+    prof_dict[t] = make_road_profile_list(t, n, args.dx, args.length, args.seed, args.write, args.path)
+
 
 
 #Step 3: Compute the sampling rate
-sample_rate = args.velocity/args.dx
+sample_rate = args.vel/args.dx
 acc_dict = {}
 #Step 4: Run the forward simulation for all the profiles, get the accelerations
 for x in range(0, len(profile_types)):
     t = profile_types[x]
     list_profiles = prof_dict[t]
-    acc_dict[t] = run_simulations(list_profiles, vehicle, sample_rate)
+    acc_dict[t] = run_simulations(t, list_profiles, vehicle, args.dx, args.vel, sample_rate, args.write, args.path)
 
 down_dict = {}
 #Step 5: Down sample the accelerations
 for x in range(0, len(profile_types)):
     t = profile_types[x]
-    dists, accs = acc_dict[t][0], acc_dict[t][1]
-    down_dict[t] = downsample(dists, accs, args.ds)
+    down_dict[t] = downsample(acc_dict[t], args.ds)
 
+inverse_dict = {}
 #Step 6: Compute the inverse
-    # TODO: Modify inverse method to return the interpolated acceleration values and accept an argument
-    # for the interpolation method
+for x in range(0, len(profile_types)):
+    t = profile_types[x]
+    downsampled_list = down_dict[t]
+    run_inverses(t, downsampled_list, vehicle, args.vel, sample_rate, args.dx, args.interp, args.write, args.path)
 
-#Step 7: Compute the MSE, save the profiles
+
+
