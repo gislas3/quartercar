@@ -112,7 +112,7 @@ class QC():
         #TODO: Appropriate error checking below
 
         # Get the points touched by the car at the given velocity, distance car traveled at velocity, and sample rate
-        road_sample = road_profile.car_sample(distances, velocities, sample_rate_hz)
+        road_sample = road_profile.car_sample(distances,velocities,sample_rate_hz)
         road_sample = road_sample.moving_avg_filter()
         if isinstance(velocities, (int, float)) and isinstance(distances, (int, float)):
             #should already be spaced evenly
@@ -187,6 +187,7 @@ class QC():
         if isinstance(velocities, (int, float)):
             velocity = velocities
             times = np.concatenate((np.zeros(1), np.cumsum(np.diff(distances) / velocity)))
+<<<<<<< HEAD
         else:
             delta = 0.25  # desired space between measurements eg. 250 mm, or 300 mm
 
@@ -200,6 +201,23 @@ class QC():
 
             if min_velocity == 0:
                 min_velocity = 10  # in m/s
+=======
+        else: #Evenly space/interpolate between acceleration values
+    		delta = 0.25 #desired space between measurements eg. 250 mm, or 300 mm
+
+			length_of_trip = int(distances[-1]) #the last measurement is the total length of the trip
+			number_of_samples = int(length_of_trip/delta) + 1
+			even_dists = np.linspace(0, length_of_trip, number_of_samples)
+			even_acc = np.interp(even_dists, distances, part['Acc_Z'])
+
+			# We choose the smallest speed for simulation
+			min_velocity = min(velocities)
+			if min_velocity == 0:
+				min_velocity = 10 #in m/s
+				
+			times = np.concatenate((np.zeros(1), np.cumsum(np.diff(even_dists) / min_velocity)))#times measured from start in seconds
+			
+>>>>>>> 41e7da1bd0282e15bb5feb91dc69f25a0453ca64
 
             times = np.concatenate(
                 (np.zeros(1), np.cumsum(np.diff(even_dists) / min_velocity)))  # times measured from start in seconds

@@ -66,7 +66,7 @@ def iso_psd_function(g_n0, n):
     n0 = .1
     return g_n0*1e-6 * (n/n0)**(-2)
 
-def make_profile_from_psd(road_type, method, delta, prof_len):
+def make_profile_from_psd(road_type, method, delta, prof_len, seed=55):
     """
     Creates a road profile from a PSD function, using the method specifed by the caller
     :param road_type: The class of the road type, according to ISO 8608
@@ -76,6 +76,7 @@ def make_profile_from_psd(road_type, method, delta, prof_len):
     :return: distances: The spatial points at which the road profile is defined
              heights: The elevations of the road profile
     """
+    np.random.seed(seed)
     #For now, we're going to use the ISO 8608 standard for the PSD function
     if road_type == 'A':
         lower, upper = 1, 32
@@ -102,7 +103,7 @@ def make_profile_from_psd(road_type, method, delta, prof_len):
         lower, upper = 131072, 524288
         mean = 262144
     g_n0 = min(upper, max(lower, np.random.normal(loc=mean, scale=mean/4)))
-    print("GNO is {0}".format(g_n0))
+    #print("GNO is {0}".format(g_n0))
     if method == 'hybrid': #TODO: Implement code for hybrid methodology
         pass
     else: #Use the cosine/sine method - might be a bit confusing since we're going to need switch back and forth between angular frequency
