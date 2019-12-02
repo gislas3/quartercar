@@ -3,12 +3,13 @@ from .roadprofile import RoadProfile
 import numpy as np
 from scipy import signal, integrate
 from matplotlib import pyplot as plt
+from scipy.interpolate import CubicSpline
 
 class QC():
     """
     A quarter car model that represents the interplay between a road surface (`RoadProfile`), a fixed (and always grounded) mass and a sprung mass.
-    The class 
-      1) calculates acceleration values from a `RoadProfile` and velocities (see `run`) and 
+    The class
+      1) calculates acceleration values from a `RoadProfile` and velocities (see `run`) and
       2) reverses the calculation to generate a `RoadProfile` from accelerations, distances and velocities.
     """
 
@@ -135,7 +136,7 @@ class QC():
 
 
         # should be even since road profile sampled evenly
-        
+
         #plt.plot(times, road_sample.get_elevations()/1000)
         #plt.xticks(np.arange(0, 10, .1), [0] + 10*[None] + [1] + 10*[None] + [2] + 77*[None])
         #plt.vlines(.2, -.02, .02)
@@ -188,9 +189,13 @@ class QC():
             velocity = velocities
             times = np.concatenate((np.zeros(1), np.cumsum(np.diff(distances) / velocity)))
         else:
+            dist_treshold = 5 #in meters
+            if sum(np.diff(distances) > dist_treshold) != 0:
+                raise Exception('Spacing of samples is larger than {0} meters'.format(dist_treshold))
+
             if interp_dx is None:
-                delta = .25
-                #pass #TODO: Create function for choosing a dx based on the spacing of the data
+                #Choose average distance
+                delta = np.average(np.diff(distances))
             else:
                 delta = interp_dx  # desired space between measurements eg. 250 mm, or 300 mm
 
@@ -199,12 +204,14 @@ class QC():
             even_dists = np.linspace(0, length_of_trip, number_of_samples)
             #print("Even dists is {0}".format(even_dists))
             if interp_type == 'linear':
-                pass #TODO: Implement cubic spline method
-            even_acc = np.interp(even_dists, distances, accelerations)
+                even_acc = np.interp(even_dists, distances, accelerations)
+
+            elif interp_type == 'polinomial':
+                cs = CubicSpline(distances, accelerations)
+                even_acc = cs(even_dists)
 
             # We choose the smallest speed for simulation
             min_velocity = min(velocities)
-
             if min_velocity == 0:
                 min_velocity = 10  # in m/s
 
@@ -214,6 +221,7 @@ class QC():
             distances = even_dists
             accelerations = even_acc
             velocity = min_velocity
+
         #Step 1: Numerically integrate x_s_dot_dot to get x_s_dot, then numerically integrate x_s_dot to get x_s
         sample_rate_per_meter = int(sample_rate_hz / velocity)
         longest_wave_len = 91 #longest wavelength of interest
@@ -248,7 +256,7 @@ class QC():
 
         #elevations_filt = signal.sosfilt(sos, elevations)
         elevations_filt = elevations
-        return elevations_filt*1000, x_s_dot, x_s, x_u, x_u_dot, x_u_dot_dot, accelerations
+        return elevations_filt*1000, x_s_dot, x_s, x_u, x_u_dot, x_u_dot_dot, even_dists, accelerations
 
 
 
@@ -256,9 +264,3 @@ class QC():
 
         #return road_profile
         #pass
-
-
-
-
-
-
