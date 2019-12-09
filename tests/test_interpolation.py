@@ -30,18 +30,18 @@ def downsample(dists, accs, n_th = 2):
 
 
 
-plots = False
+plots = True
 num_profiles = 100
 
 
-with open('interpolation_test.csv', 'w') as file:
+with open('interpolation_test2.csv', 'w') as file:
     writer = csv.writer(file)
     header = ['Profile_id', 'Down-sampling', 'Interpolation', 'Down-sampling dx', 'MSE']
     writer.writerow(header)
 
     for s in range(num_profiles):
 
-        sigma = 1  # in mm
+        sigma = 8  # in mm
         profile_len = 100 # in meters
         delta = .25 # original dx, in meters
         cutoff_freq = 0.15 #this is for the low-pass filter

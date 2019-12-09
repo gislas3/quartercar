@@ -188,6 +188,7 @@ class QC():
         if isinstance(velocities, (int, float)):
             velocity = velocities
             times = np.concatenate((np.zeros(1), np.cumsum(np.diff(distances) / velocity)))
+            even_dists = None
         else:
             dist_treshold = 5 #in meters
             if sum(np.diff(distances) > dist_treshold) != 0:
