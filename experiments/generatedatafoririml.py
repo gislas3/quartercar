@@ -65,7 +65,6 @@ parser.add_argument('-l', '--length', '--profile_length', nargs='?', type=float,
 
 
 
-
 args = parser.parse_args()
 
 # We want to run the simulation for each road profile, generate a csv file with the acceleration of the
@@ -77,18 +76,13 @@ num_classes = [args.A_profiles, args.B_profiles, args.C_profiles, args.D_profile
 vehicle = qc.QC(m_s=args.m_s, m_u=args.m_u, c_s=args.c_s, k_s=args.c_s, k_u=args.k_u)
 for t, n in zip(class_types, num_classes):
     for x in range(0, n):
-        orig_dists, orig_elevations = make_profile.make_profile_from_psd(t, 'sine', .01, args.length, x)
+        orig_dists, orig_elevations = make_profile.make_profile_from_psd(t, 'sine', args.dx, args.length, x)
         profile = roadprofile.RoadProfile(orig_dists, orig_elevations)
         iri = profile.to_iri()
         T, yout, xout, dists, elevations = vehicle.run(profile, 100, args.velocity, args.sample_rate)
         accs = yout[:, -1]
         dx_sample = dists[2] - dists[1]
-        df = pd.DataFrame({'Sprung_Mass_Acc': accs, 'Profile_Sample': elevations, 'IRI': len(accs)*[iri],
+        df = pd.DataFrame({'Distances': dists, 'Sprung_Mass_Acc': accs, 'Profile_Sample': elevations, 'IRI': len(accs)*[iri],
                            'Velocity(m/s)': len(accs)*[args.velocity], 'DX': len(accs)*[dx_sample]})
-        df.to_csv('{0}/{1}_{2}.csv'.format(args.path, t, x), index=False)
-
-
-
-
-
-
+        df.to_csv('{0}/{1}_{2}_{3}_{4}_{5}.csv'.format(args.path, t, x, round(args.velocity, 2), round(args.dx, 2), args.sample_rate), index=False)
+        print('{0}/{1}_{2}_{3}_{4}_{5}.csv'.format(args.path, t, x, round(args.velocity, 2), round(args.dx, 2), args.sample_rate))

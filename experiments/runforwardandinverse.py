@@ -27,7 +27,7 @@ import pandas as pd
 def make_road_profile_list(prof_type, num_profiles, dx, length, seed, flag, path):
     list_profiles = []
     for x in range(0, num_profiles):
-        distances, elevations = make_profile.make_profile_from_psd(prof_type, 'sine', dx/2, length, seed)
+        distances, elevations = make_profile.make_profile_from_psd(prof_type, 'sine', dx/2, length) #seed taken out
         profile = roadprofile.RoadProfile(distances, elevations)
         list_profiles.append(profile)
         if flag:
@@ -37,12 +37,12 @@ def make_road_profile_list(prof_type, num_profiles, dx, length, seed, flag, path
 
 def run_simulations(prof_type, list_profiles, car, dx, velocity, sample_rate_hz, flag, path):
     list_accs = []
-    for p in list_profiles:
+    for idx, p in enumerate(list_profiles):
         T, yout, xout, new_distances, new_elevations = car.run(p, dx, velocity, sample_rate_hz)
         accs = yout[:, -1]
         if flag:
             df = pd.DataFrame(data={"distances": new_distances, "accelerations": accs})
-            df.to_csv("{0}/{1}_{2}_accelerations".format(path, prof_type, x), index=False)
+            df.to_csv("{0}/{1}_{2}_accelerations".format(path, prof_type, idx), index=False)
         list_accs.append((new_distances, accs))
     return list_accs
 
@@ -176,6 +176,3 @@ for x in range(0, len(profile_types)):
     t = profile_types[x]
     downsampled_list = down_dict[t]
     run_inverses(t, downsampled_list, vehicle, args.vel, sample_rate, args.dx, args.interp, args.write, args.path)
-
-
-
