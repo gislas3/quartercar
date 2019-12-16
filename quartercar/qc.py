@@ -160,7 +160,7 @@ class QC():
 
 
 
-    def inverse(self, accelerations, distances, velocities, sample_rate_hz=100, interp_dx=.25, interp_type='linear'):
+    def inverse(self, accelerations, distances, velocities, sample_rate_hz=100, interp_dx=None, interp_type=None, Wn = None):
 
         """
 
@@ -193,41 +193,50 @@ class QC():
             dist_treshold = 5 #in meters
             if sum(np.diff(distances) > dist_treshold) != 0:
                 raise Exception('Spacing of samples is larger than {0} meters'.format(dist_treshold))
-
             if interp_dx is None:
                 #Choose average distance
                 delta = np.average(np.diff(distances))
             else:
                 delta = interp_dx  # desired space between measurements eg. 250 mm, or 300 mm
 
-            length_of_trip = distances[-1] # the last measurement is the total length of the trip
-            number_of_samples = int(length_of_trip / delta) + 1
-            even_dists = np.linspace(0, length_of_trip, number_of_samples)
-            #print("Even dists is {0}".format(even_dists))
-            if interp_type == 'linear':
-                even_acc = np.interp(even_dists, distances, accelerations)
+                length_of_trip = distances[-1] # the last measurement is the total length of the trip
+                number_of_samples = int(length_of_trip / delta) + 1
+                even_dists = np.linspace(0, length_of_trip, number_of_samples)
+                #print("Even dists is {0}".format(even_dists))
+                if interp_type == 'linear':
+                    even_acc = np.interp(even_dists, distances, accelerations)
 
-            elif interp_type == 'polinomial':
-                cs = CubicSpline(distances, accelerations)
-                even_acc = cs(even_dists)
+                elif interp_type == 'polynomial':
+                    cs = CubicSpline(distances, accelerations)
+                    even_acc = cs(even_dists)
 
-            # We choose the smallest speed for simulation
-            min_velocity = min(velocities)
-            if min_velocity == 0:
-                min_velocity = 10  # in m/s
+                else: #if interp_type is None
+                    if delta < 1:
+                        cs = CubicSpline(distances, accelerations)
+                        even_acc = cs(even_dists)
+                    else:
+                        even_acc = np.interp(even_dists, distances, accelerations)
 
-            times = np.concatenate(
-                (np.zeros(1), np.cumsum(np.diff(even_dists) / min_velocity)))  # times measured from start in seconds
-            #return None
-            distances = even_dists
-            accelerations = even_acc
-            velocity = min_velocity
+                # We choose the smallest speed for simulation
+                min_velocity = min(velocities)
+                if min_velocity == 0:
+                    min_velocity = 10  # in m/s
+
+                times = np.concatenate(
+                    (np.zeros(1), np.cumsum(np.diff(even_dists) / min_velocity)))  # times measured from start in seconds
+                #return None
+                distances = even_dists
+                accelerations = even_acc
+                velocity = min_velocity
 
         #Step 1: Numerically integrate x_s_dot_dot to get x_s_dot, then numerically integrate x_s_dot to get x_s
         sample_rate_per_meter = int(sample_rate_hz / velocity)
-        longest_wave_len = 91 #longest wavelength of interest
+        if Wn == None:
+            longest_wave_len = 91 #longest wavelength of interest
+            sos = signal.butter(10, 1 / longest_wave_len, 'highpass', fs=sample_rate_per_meter, output='sos')
+        else:
+            sos = signal.butter(10, Wn, 'highpass', fs=sample_rate_per_meter, output='sos')
 
-        sos = signal.butter(10, 1 / longest_wave_len, 'highpass', fs=sample_rate_per_meter, output='sos')
         x_s_dot = integrate.cumtrapz(accelerations, times, initial=0)
         #x_s_dot = signal.sosfilt(sos, x_s_dot)
         x_s = integrate.cumtrapz(x_s_dot, times, initial=0)
@@ -254,10 +263,12 @@ class QC():
 
         #plt.plot(times, elevations)
         #let's try just filtering the profile at the end, with a high pass filter (in the spatial domain) with a cutoff of 91 meters
+        if Wn == None:
+            elevations_filt = elevations
+        else:
+            elevations_filt = signal.sosfilt(sos, elevations)
 
-        #elevations_filt = signal.sosfilt(sos, elevations)
-        elevations_filt = elevations
-        return elevations_filt*1000, x_s_dot, x_s, x_u, x_u_dot, x_u_dot_dot, even_dists, accelerations
+        return elevations_filt*1000, x_s_dot, x_s, x_u, x_u_dot, x_u_dot_dot, distances, accelerations
 
 
 
