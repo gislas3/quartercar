@@ -27,7 +27,7 @@ import pandas as pd
 def make_road_profile_list(prof_type, num_profiles, dx, length, seed, flag, path):
     list_profiles = []
     for x in range(0, num_profiles):
-        distances, elevations = make_profile.make_profile_from_psd(prof_type, 'sine', dx/2, length, seed)
+        distances, elevations = make_profile.make_profile_from_psd(prof_type, 'sine', dx/2, length, x)
         profile = roadprofile.RoadProfile(distances, elevations)
         list_profiles.append(profile)
         if flag:
@@ -64,7 +64,7 @@ def downsample(list_accs, dx):
     return downsampled_accs
 
 def run_inverses(prof_type, ds_list, car, velocity, sample_rate, dx, interp, flag, path):
-    inverse_list = []
+    #inverse_list = []
     for x in range(0, len(ds_list)):
         dists, accs = ds_list[x][0], ds_list[x][1]
         packed_vals = car.inverse(accs, dists, [velocity]*len(dists), sample_rate, dx, interp)

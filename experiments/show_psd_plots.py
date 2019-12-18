@@ -4,6 +4,8 @@ from tests import make_profile as mp
 from experiments import computeisoroughness as cisr
 from quartercar import roadprofile as rp
 from matplotlib import pyplot as plt
+from quartercar import qc
+import pandas as pd
 
 def show_isoroughness_smooth():
     sigma = 8 # should be a pretty smooth road
@@ -63,5 +65,21 @@ def show_isoroughness_smooth():
     #print("lr coef is {0}".format(lr.coef_))
     print("Road class is {0}, IRI is {1}".format(road_class/1e-6, iri))
 
+def show_car_acc_plots():
+    distances, elevations = mp.make_profile_from_psd('C', 'sine', .05, 100)
+    profile = rp.RoadProfile(distances, elevations)
+    iri = profile.to_iri()
+    vehicle = qc.QC(m_s=240, m_u=36, c_s=980, k_s=16000, k_u=160000)
+    T, yout, xout, new_dists, new_els = vehicle.run(profile, 100, 10, 100)
+    accs = yout[:, -1]
+    plt.plot(new_dists, accs)
+    plt.title("Plot of distances vs accelerations of sprung mass, velocity 10 m/s")
+    plt.show()
+    plt.plot(new_dists, new_els)
+    plt.title("Original profile, iri is {0}".format(iri))
+    plt.show()
+    df = pd.DataFrame({'distances': new_dists, 'accelerations': accs})
+    df.to_csv("/Users/gregoryislas/Documents/Mobilized/data_for_iri_experimenter.csv", index=False)
 
-show_isoroughness_smooth()
+#show_isoroughness_smooth()
+show_car_acc_plots()
