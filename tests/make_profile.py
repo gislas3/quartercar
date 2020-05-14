@@ -74,7 +74,7 @@ def make_profile_from_psd(road_type, method, delta, prof_len, seed=55):
     :param delta: The spacing between successive profile points (in meters)
     :param prof_len: The length of the profile (in meters)
     :return: distances: The spatial points at which the road profile is defined
-             heights: The elevations of the road profile
+             heights: The elevations of the road profile (in mm)
     """
     np.random.seed(seed)
     #For now, we're going to use the ISO 8608 standard for the PSD function
@@ -103,7 +103,7 @@ def make_profile_from_psd(road_type, method, delta, prof_len, seed=55):
         lower, upper = 131072, 524288
         mean = 262144
     g_n0 = min(upper, max(lower, np.random.normal(loc=mean, scale=mean/4)))
-    #print("GNO is {0}".format(g_n0))
+    print("GNO is {0}".format(g_n0))
     if method == 'hybrid': #TODO: Implement code for hybrid methodology
         pass
     else: #Use the cosine/sine method - might be a bit confusing since we're going to need switch back and forth between angular frequency

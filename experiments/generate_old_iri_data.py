@@ -198,7 +198,7 @@ def compute_iri_from_slopes(slopes, intervals, vels, initial_value=None): #disps
         #    # v_list.append(np.average(vels[prev_ind:]))
     to_ret_iri = None
     if(n > 0 and curr_sum >= 0):
-        to_ret_iri = min(curr_sum/n, 20)
+        to_ret_iri = min(curr_sum/n, 40)
     return to_ret_iri, x
 
 parser = argparse.ArgumentParser(description='Program for generating data used to build ML models to predict IRI and/or road profile')
@@ -233,7 +233,7 @@ parser.add_argument('--k_u', '--tire', '--tire_spring_rate', nargs='?', type=flo
                     help='The unsprung mass spring constant (in N/m) of the vehicle to use in simulation')
 parser.add_argument('--interp', '--interpolation', nargs='?', default='None', const='None', metavar='XXXX',
                         help='The type of interpolation to use when interpolating the accelerations')
-parser.add_argument('--path', '--output_path', nargs='?', default='None', const='None', metavar='XXXX',
+parser.add_argument('--output_path', nargs='?', default='None', const='None', metavar='XXXX',
                         help='The output path to save the data')
 
 parser.add_argument('--sample_rate', '--sr', '--sr_hz', nargs='?', type=int, default=100, const=100,
@@ -246,12 +246,14 @@ parser.add_argument('--velocities', '--vel', nargs='*',
 
 parser.add_argument('-l', '--lengths', '--profile_lengths', nargs='*',
                     metavar='[N_1, N_2, ...]', help='The lengths (in m) of the profiles to generate')
+parser.add_argument('--label', '--lab',  nargs='?', default='car', const='car',
+                    metavar='LABEL', help='The label of the file for identification after')
 
 
 
 
 args = parser.parse_args()
-
+#print(args.output_path)
 # We want to run the simulation for each road profile, generate a csv file with the acceleration of the
 # sprung mass, the road profile as input, the IRI, the velocity, and the sample spacing
 
@@ -286,14 +288,14 @@ for l in lengths:
                 init_v = np.sum(slopes[:ind_11]) * dx/(dists[ind_11])
                 est_iri = compute_iri_from_slopes(slopes, deltas, vels, initial_value=np.array([[init_v], [0], [init_v],
                                                                                                 [0]]))
-                computed_iris.append(est_iri[0])
+                computed_iris.append(est_iri[0]*1000)
                 road_classes.append(t)
             seed += 1
         print("Finished length {0} for road class {1}".format(l, t))
 
 final_df = pd.DataFrame({'Est_IRI': computed_iris, 'Lengths': true_lengths, 'Velocities': true_velocities,
                          'True_IRI': true_iris, 'Road_Class': road_classes})
-final_df.to_csv('/Users/gregoryislas/Documents/Mobilized/est_iri_exp.csv', index=False)
+final_df.to_csv('{0}iri_{1}.csv'.format(args.output_path, args.label), index=False)
 
 
 

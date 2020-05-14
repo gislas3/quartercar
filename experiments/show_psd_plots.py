@@ -6,15 +6,54 @@ from quartercar import roadprofile as rp
 from matplotlib import pyplot as plt
 from quartercar import qc
 import pandas as pd
+from scipy.signal import periodogram, welch
+
+
+def get_denom(freqs, car):
+    ku = car.k1 * car.m_s
+    ks = car.k2 * car.m_s
+    ms = car.m_s
+    mu = car.mu * car.m_s
+    cs = car.c * car.m_s
+    #freqs = freqs*2*np.pi
+    denom = ku**2*(cs**2*freqs**2 + ks**2 - 2*ks*ms*freqs**2 + ms**2 * freqs**4) - \
+            2*ku*(cs**2 * freqs**4*(ms + mu) + ks**2*freqs**2*(ms + mu) - ks*ms*freqs**4*(ms + 2*mu)
+                  + ms**2*mu*freqs**6) + freqs**6*(cs**2 * (ms + mu)**2 + ms**2*mu**2*freqs**2) + \
+                ks**2*freqs**4*(ms + mu)**2 - 2*ks*ms*mu*freqs**6*(ms + mu)
+    return denom
+
+def get_num(freqs, car):
+    ku = car.k1 * car.m_s
+    ks = car.k2 * car.m_s
+    ms = car.m_s
+    mu = car.mu * car.m_s
+    cs = car.c * car.m_s
+    #freqs = freqs*2*np.pi*
+    alpha = (-(cs**2)*ms*freqs**4 - cs**2*mu*freqs**4 + ks*ms*mu*freqs**4 + cs**2*ku*freqs**2 -
+            ks**2*ms*freqs**2 - ku*ks*ms*freqs**2 - ks**2*mu*freqs**2 + ku*ks**2)*ku
+    beta = (cs*ku*ms*freqs**3 - cs*ms*mu*freqs**5)*ku
+    return alpha**2 + beta**2
+
+def acc_transfer_function(car, veloc, orig_freqs, orig_psd):
+    new_freqs = orig_freqs*veloc*2*np.pi
+    denom = get_denom(new_freqs, car)
+    num = get_num(new_freqs, car)
+    new_psd = orig_psd * (new_freqs**4*num)/(denom**2) #Um - should be new_freqs**4 according to my calculations...
+    return new_freqs, new_psd
+
 
 def show_isoroughness_smooth():
     sigma = 8 # should be a pretty smooth road
     #profile_len, delta, cutoff_freq, delta2, seed = 1000, .3, .15, .01, 55
     #dists, orig_hts, low_pass_hts, final_dists, final_heights = mp.make_gaussian(sigma, profile_len, delta,
      #                                                                            cutoff_freq, delta2, seed)
-    distances, elevations = mp.make_profile_from_psd('B', 'sine', .1, 100)
+    sample_rate_hz = 100
+    distances, elevations = mp.make_profile_from_psd('B', 'sine', .01, 100, seed=55)
     profile = rp.RoadProfile(distances, elevations)
     iri = profile.to_iri()
+    vehicle = qc.QC(m_s=243, m_u=40, c_s=370, k_s=14671, k_u=124660)
+    veloc = 12
+    T, yout, xout, new_dists, new_els = vehicle.run(profile, 100, veloc, sample_rate_hz)
     freqs, psd = cisr.compute_psd(profile, dx=np.diff(profile.get_distances())[0])
     smth_freqs, smth_psd = cisr.smooth_psd(freqs, psd)
     regressor = cisr.fit_smooth_psd(smth_freqs, smth_psd)
@@ -25,8 +64,16 @@ def show_isoroughness_smooth():
     plt.title("Original Road Profile")
     plt.show()
 
-    plt.loglog(freqs, psd)
+    plt.loglog(freqs, psd, label='Hypothetical PSD')
+    #print(elevations)
+    f_road, psd_road = periodogram(elevations/1000, 100)
+    #print(f_road)
+    #print(freqs)
+    #print(psd)
+    #print(psd_road)
+    plt.loglog(f_road, psd_road, label='Calculated PSD')
     #plt.plot(freqs, psd)
+    plt.legend()
     plt.title("PSD of Original Road Profile")
     plt.xlim(1e-2, 10)
     plt.ylim(1e-10, 1)
@@ -49,6 +96,28 @@ def show_isoroughness_smooth():
     #plt.xlim(1e-2, 10)
     plt.ylim(1e-10, 10)
     plt.show()
+    f, acc_psd = periodogram(yout[:, -1], sample_rate_hz)
+
+    plt.loglog(f, acc_psd, label='Acc PSD')
+
+    new_f, new_psd = acc_transfer_function(vehicle, veloc, f_road, psd_road)
+    rat = 0
+    #rat = np.mean(acc_psd[np.where(new_psd != 0)]/new_psd[np.where(new_psd != 0)])
+    print("Len acc_psd, len new_psd are {0}, {1}".format(len(acc_psd), len(new_psd)))
+    plt.loglog(new_f/(2*np.pi), new_psd, label='Transfer PSD')
+    plt.title("Acceleration PSD, \n rat is {0}".format(round(rat, 4)))
+    plt.legend()
+    plt.ylim(1e-10, 10)
+    plt.show()
+    plt.loglog(f,new_psd[:len(acc_psd)] - acc_psd)
+    #plt.plot(f,new_psd[:len(acc_psd)] - acc_psd)
+    #plt.ylim(0, 1)
+    plt.title("Diff of transfer pds vs computed psd")
+    plt.show()
+
+    #plt.title("Transfer Acceleration PSD")
+    #plt.ylim(1e-10, 10)
+    #plt.show()
     #print("preds1 is {0}".format(preds1))
     #print("preds2 is {0}".format(preds2))
     print("regressor coef {0}, regressor intercept {1}".format(regressor.coef_, regressor.intercept_))
@@ -64,6 +133,9 @@ def show_isoroughness_smooth():
     #plt.show()
     #print("lr coef is {0}".format(lr.coef_))
     print("Road class is {0}, IRI is {1}".format(road_class/1e-6, iri))
+
+
+
 
 def show_car_acc_plots():
     distances, elevations = mp.make_profile_from_psd('C', 'sine', .05, 100)
@@ -81,5 +153,5 @@ def show_car_acc_plots():
     df = pd.DataFrame({'distances': new_dists, 'accelerations': accs})
     df.to_csv("/Users/gregoryislas/Documents/Mobilized/data_for_iri_experimenter.csv", index=False)
 
-#show_isoroughness_smooth()
-show_car_acc_plots()
+show_isoroughness_smooth()
+#show_car_acc_plots()

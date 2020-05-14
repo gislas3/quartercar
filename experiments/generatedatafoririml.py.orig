@@ -5,8 +5,6 @@ import numpy as np
 import pandas as pd
 
 
-
-
 parser = argparse.ArgumentParser(description='Program for generating data used to build ML models to predict IRI and/or road profile')
 
 parser.add_argument('-A', '--A_profiles', '--num_A', nargs='?', type=int, default=0, const=0, metavar='N',
@@ -62,7 +60,7 @@ parser.add_argument('--format', '--write_to_file', nargs='?', type=int, default=
 parser.add_argument('-l', '--length', '--profile_length', nargs='?', type=float, default=100, const=100,
                     metavar='N', help='The length (in m) of the profiles to generate')
 
-
+parser.add_argument()
 
 
 args = parser.parse_args()
@@ -74,9 +72,14 @@ class_types = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
 num_classes = [args.A_profiles, args.B_profiles, args.C_profiles, args.D_profiles,
                args.E_profiles, args.F_profiles, args.G_profiles, args.H_profiles]
 vehicle = qc.QC(m_s=args.m_s, m_u=args.m_u, c_s=args.c_s, k_s=args.c_s, k_u=args.k_u)
+seed = 1
 for t, n in zip(class_types, num_classes):
     for x in range(0, n):
+<<<<<<< HEAD
+        orig_dists, orig_elevations = make_profile.make_profile_from_psd(t, 'sine', .01, args.length, seed)
+=======
         orig_dists, orig_elevations = make_profile.make_profile_from_psd(t, 'sine', args.dx, args.length, x)
+>>>>>>> 6c1073ee3e55309ecb6c6ab9d8e40430b66b7e13
         profile = roadprofile.RoadProfile(orig_dists, orig_elevations)
         iri = profile.to_iri()
         T, yout, xout, dists, elevations = vehicle.run(profile, 100, args.velocity, args.sample_rate)
@@ -84,5 +87,16 @@ for t, n in zip(class_types, num_classes):
         dx_sample = dists[2] - dists[1]
         df = pd.DataFrame({'Distances': dists, 'Sprung_Mass_Acc': accs, 'Profile_Sample': elevations, 'IRI': len(accs)*[iri],
                            'Velocity(m/s)': len(accs)*[args.velocity], 'DX': len(accs)*[dx_sample]})
+<<<<<<< HEAD
+        df.to_csv('{0}/{1}_{2}_{3}.csv'.format(args.path, t, x, args.velocity), index=False)
+        seed += 1
+
+
+
+
+
+
+=======
         df.to_csv('{0}/{1}_{2}_{3}_{4}_{5}.csv'.format(args.path, t, x, round(args.velocity, 2), round(args.dx, 2), args.sample_rate), index=False)
         print('{0}/{1}_{2}_{3}_{4}_{5}.csv'.format(args.path, t, x, round(args.velocity, 2), round(args.dx, 2), args.sample_rate))
+>>>>>>> 6c1073ee3e55309ecb6c6ab9d8e40430b66b7e13
