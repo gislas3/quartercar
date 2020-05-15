@@ -115,7 +115,7 @@ class QC():
         # Get the points touched by the car at the given velocity, distance car traveled at velocity, and sample rate
         road_sample = road_profile.car_sample(distances, velocities, sample_rate_hz)
         print("road sample elevations 0 is {0}".format(road_sample.get_elevations()[0]))
-        road_sample = road_sample.moving_avg_filter()
+        #road_sample = road_sample.moving_avg_filter()
         if isinstance(velocities, (int, float)) and isinstance(distances, (int, float)):
             #should already be spaced evenly
             velocity = velocities

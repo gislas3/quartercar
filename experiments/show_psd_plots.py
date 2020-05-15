@@ -9,6 +9,53 @@ import pandas as pd
 from scipy.signal import periodogram, welch
 
 
+
+def get_transfer_func2(car, veloc, orig_freqs, orig_psd):
+    ku = car.k1 * car.m_s
+    ks = car.k2 * car.m_s
+    ms = car.m_s
+    mu = car.mu * car.m_s
+    cs = car.c * car.m_s
+    new_freqs = orig_freqs * veloc * 2 * np.pi
+    num1 = ms*new_freqs**2*ku
+    denom1 = ku - ((ks + new_freqs*cs)*new_freqs**2*ms/(-ms*new_freqs**2) + ks + new_freqs*cs) - mu*new_freqs**2
+    num2 = ms*new_freqs**2
+    denom2 = ks - ms*new_freqs**2+ new_freqs*cs
+    t_func = num1/denom1 * (1 + num2/denom2)
+    return new_freqs, orig_psd*(new_freqs**4)*t_func/(ms**2)
+
+def get_transfer_func3(car, veloc, orig_freqs, orig_psd):
+    ku = car.k1 * car.m_s
+    ks = car.k2 * car.m_s
+    ms = car.m_s
+    mu = car.mu * car.m_s
+    cs = car.c * car.m_s
+    new_freqs = orig_freqs * veloc * 2 * np.pi
+    #t_func = new_freqs**2 * (cs*ku*new_freqs + ks*ku)/(mu*ms*new_freqs**4 + (cs*mu + cs*ms)*new_freqs**3 +
+    #                                                   (ms*ks+mu*ks+ms*ku)*new_freqs**2 + (cs*ku)*new_freqs + ks*ku)
+    t_func = np.sqrt(cs**2*ku**2*new_freqs**6 + ks**2*mu**2*new_freqs**4)/np.sqrt(
+        (cs*ks*new_freqs + new_freqs**3*(-cs*ms - cs*mu))**2 + (new_freqs**2*(-ks*ms-ks*mu - ku*ms)
+                                                               + ks*ku + ms*mu*new_freqs**4)**2)
+
+    return new_freqs, t_func**2*orig_psd
+
+def get_transfer_func4(car, veloc, orig_freqs, orig_psd):
+    ku = car.k1 * car.m_s
+    ks = car.k2 * car.m_s
+    ms = car.m_s
+    mu = car.mu * car.m_s
+    cs = car.c * car.m_s
+    new_freqs = orig_freqs * veloc * 2 * np.pi
+    # t_func = new_freqs**2 * (cs*ku*new_freqs + ks*ku)/(mu*ms*new_freqs**4 + (cs*mu + cs*ms)*new_freqs**3 +
+    #                                                   (ms*ks+mu*ks+ms*ku)*new_freqs**2 + (cs*ku)*new_freqs + ks*ku)
+    t_func = np.sqrt(cs ** 2 * ku ** 2 * new_freqs ** 6 + ks ** 2 * mu ** 2 * new_freqs ** 4) / np.sqrt(
+            (cs * ks * new_freqs + new_freqs ** 3 * (-cs * ms - cs * mu)) ** 2 + (
+                        new_freqs ** 2 * (-ks * ms - ks * mu - ku * ms)
+                        + ks * ku + ms * mu * new_freqs ** 4) ** 2)
+
+    return t_func ** 2
+           #*(1 + ms*new_freqs**2/(ks - ms*new_freqs**2 + new_freqs*cs))
+
 def get_denom(freqs, car):
     ku = car.k1 * car.m_s
     ks = car.k2 * car.m_s
@@ -21,6 +68,9 @@ def get_denom(freqs, car):
                   + ms**2*mu*freqs**6) + freqs**6*(cs**2 * (ms + mu)**2 + ms**2*mu**2*freqs**2) + \
                 ks**2*freqs**4*(ms + mu)**2 - 2*ks*ms*mu*freqs**6*(ms + mu)
     return denom
+
+
+
 
 def get_num(freqs, car):
     ku = car.k1 * car.m_s
@@ -44,16 +94,16 @@ def acc_transfer_function(car, veloc, orig_freqs, orig_psd):
 
 def show_isoroughness_smooth():
     sigma = 8 # should be a pretty smooth road
-    #profile_len, delta, cutoff_freq, delta2, seed = 1000, .3, .15, .01, 55
-    #dists, orig_hts, low_pass_hts, final_dists, final_heights = mp.make_gaussian(sigma, profile_len, delta,
-     #                                                                            cutoff_freq, delta2, seed)
+    profile_len, delta, cutoff_freq, delta2, seed = 200, .3, .15, .1, 55
+    dist, orig_hts, low_pass_hts, distances, elevations = mp.make_gaussian(sigma, profile_len, delta,
+                                                                                 cutoff_freq, delta2, seed)
     sample_rate_hz = 100
-    distances, elevations = mp.make_profile_from_psd('B', 'sine', .01, 100, seed=55)
-    profile = rp.RoadProfile(distances, elevations)
+    #distances, elevations = mp.make_profile_from_psd('C', 'sine', .1, 500, seed=55)
+    profile = rp.RoadProfile(distances, elevations, filtered=True)
     iri = profile.to_iri()
     vehicle = qc.QC(m_s=243, m_u=40, c_s=370, k_s=14671, k_u=124660)
-    veloc = 12
-    T, yout, xout, new_dists, new_els = vehicle.run(profile, 100, veloc, sample_rate_hz)
+    veloc = 20
+    T, yout, xout, new_dists, new_els = vehicle.run(profile, 1000, veloc, sample_rate_hz)
     freqs, psd = cisr.compute_psd(profile, dx=np.diff(profile.get_distances())[0])
     smth_freqs, smth_psd = cisr.smooth_psd(freqs, psd)
     regressor = cisr.fit_smooth_psd(smth_freqs, smth_psd)
@@ -66,7 +116,7 @@ def show_isoroughness_smooth():
 
     plt.loglog(freqs, psd, label='Hypothetical PSD')
     #print(elevations)
-    f_road, psd_road = periodogram(elevations/1000, 100)
+    f_road, psd_road = periodogram(elevations/1000, 10)
     #print(f_road)
     #print(freqs)
     #print(psd)
@@ -97,23 +147,72 @@ def show_isoroughness_smooth():
     plt.ylim(1e-10, 10)
     plt.show()
     f, acc_psd = periodogram(yout[:, -1], sample_rate_hz)
+    plt.loglog(f, acc_psd)
+    plt.title("Acc PSD")
+    plt.ylim(1e-10, 10)
+    plt.show()
+    new_f, new_psd = acc_transfer_function(vehicle, veloc, f_road, psd_road)
+    plt.loglog(new_f / (2 * np.pi), new_psd,  label='My Transfer')
+    plt.ylim(1e-10, 10)
+    #plt.title("Transfer PSD")
+    #plt.show()
+    newt_f, newt_psd = get_transfer_func3(vehicle, veloc, f_road, psd_road)
+    plt.loglog(newt_f / (2 * np.pi), newt_psd, label='Transfer 3')
+    #plt.ylim(1e-10, 10)
+    #plt.title("Transfer PSD 3")
+    plt.title("My Transfer vs Transfer 3")
+    plt.legend()
+    plt.show()
+
+    plt.loglog(f, acc_psd, 'o', label='Acc PSD')
+    plt.loglog(new_f / (2 * np.pi), new_psd,  'o', label='Transfer PSD')
+    plt.legend()
+    plt.title("Acc PSD vs Orig Transfer func")
+    plt.ylim(1e-10, 10)
+    plt.show()
+    rat = 0
+    #rat = np.mean(acc_psd[np.where(new_psd != 0)]/new_psd[np.where(new_psd != 0)])
+    #print("Len acc_psd, len new_psd are {0}, {1}".format(len(acc_psd), len(new_psd)))
+
+
+    plt.loglog(newt_f / (2 * np.pi), newt_psd, label='Transfer PSD3')
 
     plt.loglog(f, acc_psd, label='Acc PSD')
 
-    new_f, new_psd = acc_transfer_function(vehicle, veloc, f_road, psd_road)
     rat = 0
-    #rat = np.mean(acc_psd[np.where(new_psd != 0)]/new_psd[np.where(new_psd != 0)])
-    print("Len acc_psd, len new_psd are {0}, {1}".format(len(acc_psd), len(new_psd)))
-    plt.loglog(new_f/(2*np.pi), new_psd, label='Transfer PSD')
-    plt.title("Acceleration PSD, \n rat is {0}".format(round(rat, 4)))
+    # rat = np.mean(acc_psd[np.where(new_psd != 0)]/new_psd[np.where(new_psd != 0)])
+    # print("Len acc_psd, len new_psd are {0}, {1}".format(len(acc_psd), len(new_psd)))
+    plt.title("Acceleration PSD vs Transfer PSD 3")
     plt.legend()
     plt.ylim(1e-10, 10)
     plt.show()
-    plt.loglog(f,new_psd[:len(acc_psd)] - acc_psd)
+
+    plt.loglog(f_road[:min(len(psd_road), len(acc_psd))] * veloc,
+               acc_psd[:min(len(psd_road), len(acc_psd))]/psd_road[:min(len(psd_road), len(acc_psd))], label="True ratio")
+    plt.loglog(new_f/(2* np.pi), (f_road*veloc*2*np.pi)**4*get_num(car=vehicle, freqs=f_road*veloc*2*np.pi)/(get_denom(car=vehicle, freqs=f_road*veloc*2*np.pi)**2),
+               label="Est Ratio")
+    plt.title("What transfer func should be...")
+    plt.legend()
+    plt.show()
+
+    #Last plot... show road divided by the transfer function
+    plt.loglog(f_road, psd_road, label='Road PSD')
+    plt.loglog(f/veloc,
+               acc_psd / ((f*2*np.pi)**4*get_num(car=vehicle, freqs=f*2*np.pi)/(get_denom(car=vehicle, freqs=f*2*np.pi)**2)),
+               label="Recovered PSD")
+    plt.loglog(f / veloc,
+               acc_psd / get_transfer_func4(vehicle, veloc, f / veloc, None),
+               label="Recovered PSD Transfer 2")
+    # plt.plot(freqs, psd)
+    plt.legend()
+    plt.title("PSD of Original Road Profile vs Recovered(s)")
+    plt.show()
+
+    #plt.loglog(f,new_psd[:len(acc_psd)] - acc_psd)
     #plt.plot(f,new_psd[:len(acc_psd)] - acc_psd)
     #plt.ylim(0, 1)
-    plt.title("Diff of transfer pds vs computed psd")
-    plt.show()
+    #plt.title("Diff of transfer pds vs computed psd")
+    #plt.show()
 
     #plt.title("Transfer Acceleration PSD")
     #plt.ylim(1e-10, 10)

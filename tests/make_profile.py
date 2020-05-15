@@ -3,6 +3,7 @@ import numpy as np
 from scipy.interpolate import CubicSpline
 from scipy.stats import multivariate_normal
 from scipy.signal import butter, sosfilt
+from scipy.signal import detrend
 from matplotlib import pyplot as plt
 
 
@@ -102,7 +103,7 @@ def make_profile_from_psd(road_type, method, delta, prof_len, seed=55):
     else: #road_type == 'H': - if it's called with garbage, just give a rough road
         lower, upper = 131072, 524288
         mean = 262144
-    g_n0 = min(upper, max(lower, np.random.normal(loc=mean, scale=mean/4)))
+    g_n0 = np.random.uniform(lower,  upper)#min(upper, max(lower, np.random.normal(loc=mean, scale=mean/4)))
     print("GNO is {0}".format(g_n0))
     if method == 'hybrid': #TODO: Implement code for hybrid methodology
         pass
@@ -128,13 +129,13 @@ def make_profile_from_psd(road_type, method, delta, prof_len, seed=55):
         distances = np.arange(0, prof_len + delta, delta)
         elevations = np.zeros(len(distances))
         psd_vals = np.array(list(map(lambda x: iso_psd_function(g_n0, x), freqs)))
-        phase_angles = np.random.uniform(-np.pi, np.pi, len(freqs))
+        phase_angles = np.random.uniform(0, 2*np.pi, len(freqs))
         for x in range(0, len(elevations)):
             d = distances[x]
             elevations[x] = np.sum(np.sqrt(2*freq_deltas*psd_vals)*np.cos(2*np.pi*freqs*d + phase_angles))
         elevations = elevations - np.mean(elevations) #so it has zero mean
 
-        return distances, elevations*1000
+        return distances, detrend(elevations)*1000
 
 
 
