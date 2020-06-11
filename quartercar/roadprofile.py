@@ -1,5 +1,6 @@
 
 import numpy as np
+from scipy.interpolate import CubicSpline
 from scipy.fftpack import fft
 from scipy.signal import periodogram
 from scipy.signal import welch
@@ -19,6 +20,7 @@ class RoadProfile():
         self.elevations = elevations
         self.distances = distances
         self.filtered = filtered
+        self.cs = CubicSpline(self.distances, self.elevations)
         self.dx_constant = np.allclose(np.diff(np.diff(self.distances)), np.zeros(len(self.distances[:-2]))) #Whether or not dx is constant
 
         if not len(elevations) == len(distances):
@@ -57,6 +59,20 @@ class RoadProfile():
 
     def get_distances(self):
         return self.distances
+
+    def get_next_sample(self, dist, base_len=.25):
+        """
+        Returns a moving average filtered input for a quartercar simulation based on this profile
+        :param dist: The distance at which to perform the moving average filter
+        :param base_len: The base length (in meters) of the moving average filter. Default .25
+        :return: A float type, which is the moving average filtered profile height
+        """
+        #
+        if dist >= self.length():
+            return self.elevations[-1]
+        xs = np.arange(dist, min(dist+.25, self.length()), .01)
+        to_ret = self.cs(dist)
+        return to_ret#np.mean(self.cs(xs))
 
     def length(self):
         """

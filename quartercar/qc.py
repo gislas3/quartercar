@@ -4,6 +4,7 @@ import numpy as np
 from scipy import signal, integrate
 from matplotlib import pyplot as plt
 from scipy.interpolate import CubicSpline
+import logging
 
 class QC():
     """
@@ -114,7 +115,7 @@ class QC():
 
         # Get the points touched by the car at the given velocity, distance car traveled at velocity, and sample rate
         road_sample = road_profile.car_sample(distances, velocities, sample_rate_hz)
-        print("road sample elevations 0 is {0}".format(road_sample.get_elevations()[0]))
+        #print("road sample elevations 0 is {0}".format(road_sample.get_elevations()[0]))
         #road_sample = road_sample.moving_avg_filter()
         if isinstance(velocities, (int, float)) and isinstance(distances, (int, float)):
             #should already be spaced evenly
@@ -145,15 +146,134 @@ class QC():
         #x0 = self.get_initial_state(road_sample)
         x0 = np.zeros(4).reshape(4, -1) #Didn't seem to have much effect when looking at the plots how we initialized the system
         #print("len(road_sample.get_elevations()) is {0}, len(times) is {1}".format(len(road_sample.get_elevations()), len(times)))
-        print("Times 0 is {0}, elevations 0 is {1}".format(times[0], road_sample.get_elevations()[0]))
+        #print("Times 0 is {0}, elevations 0 is {1}".format(times[0], road_sample.get_elevations()[0]))
         T, yout, xout = signal.lsim(state_space, road_sample.get_elevations()/1000, times, x0.reshape(1, -1))
 
         #print("T.shape is {0}, y.shape is {1}, x.shape is {2}".format(T.shape, yout.shape, xout.shape))
 
         return T, yout, xout, road_sample.get_distances(), road_sample.get_elevations()
 
+    def next_state(self, t0, p0, v0, delta_t, acc):
+        # we aren't going to let the car go backwards, check for that here
+        #if v0 == 0 and acc < 0:
+        #    acc = abs(acc) #change to positive acceleration so we don't have a bunch of useless data points
+        delta_p = delta_t * v0 + .5 * delta_t ** 2 * acc
+        delta_v = acc * delta_t
+        if delta_p < 0:
+            delta_p = 0
+        #if delta_v < 0:
+        #    delta_v = 0
+        t0 += delta_t
+        p0 = p0 + delta_p
+        v0 = max(v0 + delta_v, 0) #can't have negative velocity, that would be very bad
+        return t0, p0, v0
 
 
+    def run2(self, road_profile,  accelerations, v0=0, delta_t=1e-3, final_sample_rate=None):
+        """
+        run2 will return a sampled acceleration series of the given road profile, where each
+        point corresponds to the acceleration of the qc model at a given time. As of now, doesn't
+        take into account any vehicle dynamics (roll/pitch) aside from the vertical vibration
+        :param road_profile: The `RoadProfile` object that defines the road to perform the simulation on
+        :param accelerations: Either a list of tuples, where each tuple defines how long (in time) to perform the
+        acceleration for (so it should be a list like: [(acc1, time1), (acc2, time2), ... (accn, timen)] or a tuple where
+        the first element is a scipy random object (defines the distribution of accelerations to pull from) and the second
+        is a number type that defines the amount of time to perform the simulation for
+        :param v0: The initial velocity (units m/s) default: 0
+        :param delta_t: The spacing in time (in seconds) over which to discretize the simulation/differential equation
+        :param final_sample_rate: The final sample rate of the series to return. If none, returns the series sampled at delta_t.
+        :return: list of acceleration values (in m/s^2)
+        """
+        #curr_dist = 0
+        t0, p0 = 0, 0
+        input_times = [0]
+        input_elevations = [road_profile.get_next_sample(0)]
+        distances = [0]
+        velocities = [v0]
+        if type(accelerations) == list: #if a list input, this means accelerations pre defined
+            for tup in accelerations:
+                acc, time = tup[0], tup[1]
+                ref_t = 0
+                #If you don't calculate the times/velocity/accelerations properly, will just return up to the end of the profile
+                while ref_t < time and p0 < road_profile.length():
+                    t0, p0, v0 = self.next_state(t0, p0, v0, delta_t, acc)
+                    #print("t0 is {0}, v0 is {1}, p0 is {2}".format(t0, v0, p0))
+                    elev = road_profile.get_next_sample(p0)
+                    input_times.append(t0)
+                    input_elevations.append(elev)
+                    velocities.append(v0)
+                    ref_t += delta_t
+                    #curr_dist += p0
+                    distances.append(p0)
+                #print("P0 is {0}, v0 is {1}".format(p0, v0))
+            while p0 < road_profile.length(): #in case v0 is 0, set a constant acceleration of 1 second (I know this is pretty arbitrary)
+                if v0 == 0:
+                    acc = 5
+                    logging.warning("""v0 is 0, no more accelerations input, and haven't reached end of profile. \n Profile length is {0}, final pos is {1}. 
+                    Inputting constant acceleration of 5 for .001 second to rectify """.format(road_profile.length(), p0))
+                else:
+                    acc = 0
+                t0, p0, v0 = self.next_state(t0, p0, v0, delta_t, acc)
+                elev = road_profile.get_next_sample(p0)
+                input_times.append(t0)
+                input_elevations.append(elev)
+                distances.append(p0)
+                velocities.append(v0)
+                acc = 0
+        elif type(accelerations) == tuple: #if a tuple input, this means need to pull accelerations from distribution
+            distribution, time = accelerations[0], accelerations[1]
+            ref_t = 0
+            while p0 < road_profile.length() and t0 < time:
+                #t0 += delta_t
+                acc = distribution.rvs()
+                t0, p0, v0 = self.next_state(t0, p0, v0, delta_t, acc)
+
+                elev = road_profile.get_next_sample(p0)
+                input_times.append(t0)
+                input_elevations.append(elev)
+                distances.append(p0)
+                velocities.append(v0)
+        else:
+            raise(ValueError("""Unknown acceleration input, please either input a list of tuples where each tuple specifies
+                             the acceleration/time or a tuple that specifies the distribution of accelerations/time of experiment"""))
+
+        input_times = np.array(input_times)
+        input_elevations = np.array(input_elevations)
+        velocities = np.array(velocities)
+        distances = np.array(distances)
+        a = np.array(
+            [[0, 1, 0, 0], [-self.k2, -self.c, self.k2, self.c], [0, 0, 0, 1],
+             [self.k2 / self.mu, self.c / self.mu, -(self.k1 + self.k2) / self.mu, -self.c / self.mu]])
+        b = np.array([[0], [0], [0], [self.k1 / self.mu]])
+        # print("B shape is {0}".format(b.shape))
+        c = np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1],
+                      [self.k2 / self.mu, self.c / self.mu, -(self.k1 + self.k2) / self.mu, -self.c / self.mu],
+                      [-self.k2, -self.c, self.k2, self.c]])
+        # print("C shape is {0}".format(c.shape))
+        # More information about the state space can be found in http://onlinepubs.trb.org/Onlinepubs/trr/1995/1501/1501-001.pdf
+        # Basically, we just want dx/dt = Ax + bu, y = x
+        state_space = signal.StateSpace(a, b, c, None)
+        x0 = np.zeros(4).reshape(4, -1)
+        T, yout, xout = signal.lsim(state_space, input_elevations/1000, input_times, x0.reshape(1, -1))
+
+        if final_sample_rate is not None:
+            new_delta_t = 1/final_sample_rate
+            if new_delta_t < delta_t: #Can't have a sample rate higher than 1/delta_t
+                logging.warning("You are trying to return a sample rate higher than you set the initial sample rate, so this is just going to return the originally sampled series")
+                #print("You are trying to return a sample rate higher than you set the initial sample rate, so this is just going to return the originally sampled series")
+            elif new_delta_t % delta_t != 0:
+                logging.warning("You are trying to downsample at a non-integer downsampling rate - this is not supported (yet), so just returning orignally sampled series")
+                #print("You are trying to downsample at a non-integer downsampling rate - this is not supported (yet), so just returning orignally sampled series")
+            else:
+                factor = int(new_delta_t/delta_t)
+                T = T[list(range(0, len(T), factor))]
+                yout = yout[list(range(0, len(yout), factor)), ]
+                xout = xout[list(range(0, len(xout), factor)), ]
+                distances = distances[list(range(0, len(distances), factor))]
+                input_elevations = input_elevations[list(range(0, len(distances), factor))]
+                velocities = velocities[list(range(0, len(distances), factor))]
+
+        return T, yout, xout, distances, input_elevations, velocities
 
 
         #
@@ -278,3 +398,58 @@ class QC():
 
         #return road_profile
         #pass
+
+    def transfer_function(self, frequencies, psd, veloc):
+        """
+        Method for computing the transfer function for this car's parameters given road input frequencies, road
+        power spectral density, and velocity
+        :param frequencies: Frequencies of the road power spectral density, assumed to be in units cycles/meter
+        :param psd: Power spectral density of the road profile the car will be driven over
+        :param veloc: The velocity that the car will be driving over the profile at, should in in units m/s
+        :return: time_frequencies (the new frequencies converted to the time domain, in units Hz/cycles/second)
+                acc_psd (the acceleration power spectral density using the transfer function)
+        """
+        ku = self.k1 * self.m_s
+        ks = self.k2 * self.m_s
+        ms = self.m_s
+        mu = self.mu * self.m_s
+        cs = self.c * self.m_s
+        # new_freqs = orig_freqs * veloc * 2 * np.pi
+        time_frequencies = frequencies * veloc * 2 * np.pi #convert to angular frequency for input to transfer function
+        # t_func = new_freqs**2 * (cs*ku*new_freqs + ks*ku)/(mu*ms*new_freqs**4 + (cs*mu + cs*ms)*new_freqs**3 +
+        #                                                   (ms*ks+mu*ks+ms*ku)*new_freqs**2 + (cs*ku)*new_freqs + ks*ku)
+        transfer_func = (time_frequencies ** 2 * np.sqrt(cs ** 2 * ku ** 2 * time_frequencies ** 2 + ks ** 2 * ku ** 2)) / np.sqrt(
+            (cs * ku * time_frequencies + time_frequencies ** 3 * (-cs * ms - cs * mu)) ** 2 + (
+                        time_frequencies ** 2 * (-ks * ms - ks * mu - ku * ms)
+                        + ks * ku + ms * mu * time_frequencies ** 4) ** 2)
+        return time_frequencies / (2 * np.pi), transfer_func ** 2 * (psd/veloc)
+
+
+    def inverse_transfer_function(self, frequencies, psd, veloc):
+        """
+                Method for computing the inverse transfer function for this car's parameters given road input frequencies, road
+                power spectral density, and velocity
+                :param frequencies: Frequencies of the acceleration power spectral density, assumed to be in units cycles/meter
+                :param psd: Acceleration power spectral density
+                :param veloc: The velocity that the car drover over the profile at, should be in units m/s
+                :return: spatial_frequencies (the new frequencies converted to the spatial domain, in units cycles/meter)
+                        road_psd (the road power spectral density using the transfer function)
+        """
+        ku = self.k1 * self.m_s
+        ks = self.k2 * self.m_s
+        ms = self.m_s
+        mu = self.mu * self.m_s
+        cs = self.c * self.m_s
+        frequencies = frequencies * 2* np.pi #need to convert to angular frequency
+        transfer_func = (frequencies ** 2 * np.sqrt(
+            cs ** 2 * ku ** 2 * frequencies ** 2 + ks ** 2 * ku ** 2)) / np.sqrt(
+            (cs * ku * frequencies + frequencies ** 3 * (-cs * ms - cs * mu)) ** 2 + (
+                    frequencies ** 2 * (-ks * ms - ks * mu - ku * ms)
+                    + ks * ku + ms * mu * frequencies ** 4) ** 2)
+        road_psd = (psd * veloc)/(transfer_func)**2
+        road_psd[np.where(road_psd == np.inf)] = 0
+        road_psd[np.where(np.isnan(road_psd))] = 0
+        #road_psd[np.where(road_psd == np.nan)] = 0
+        #road_psd[np.where(road_psd == np.nan)] = 0
+        spatial_frequencies = frequencies/(2*np.pi * veloc)
+        return spatial_frequencies, road_psd

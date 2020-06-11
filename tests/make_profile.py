@@ -57,17 +57,27 @@ def make_gaussian(sigma, profile_len, delta, cutoff_freq, delta2=None, seed=None
     return distances, orig_hts, prof_hts, new_dists, new_heights
 
 
-def iso_psd_function(g_n0, n):
+def iso_psd_function(g_n0, n, n0=.1):
     """
     Defines the iso psd function given g_n0 (assumes units of frequency cycles per meter)
     :param g_n0: The value of G_d(n0)
     :param n: The frequency at which to calculate the value of the function
     :return: The function evaluated at n
     """
-    n0 = .1
+    #n0 = .1
     return g_n0*1e-6 * (n/n0)**(-2)
 
-def make_profile_from_psd(road_type, method, delta, prof_len, seed=55):
+def iso_psd_function_angular(g_n0, w):
+    """
+    Defines the iso psd function given g_n0 (assumes units of frequency cycles per meter)
+    :param g_n0: The value of G_d(n0)
+    :param n: The frequency at which to calculate the value of the function
+    :return: The function evaluated at n
+    """
+    w0 = 1
+    return g_n0*1e-6 * (w/w0)**(-2)
+
+def make_profile_from_psd(road_type, method, delta, prof_len, seed=55, ret_gn0=False):
     """
     Creates a road profile from a PSD function, using the method specifed by the caller
     :param road_type: The class of the road type, according to ISO 8608
@@ -104,38 +114,47 @@ def make_profile_from_psd(road_type, method, delta, prof_len, seed=55):
         lower, upper = 131072, 524288
         mean = 262144
     g_n0 = np.random.uniform(lower,  upper)#min(upper, max(lower, np.random.normal(loc=mean, scale=mean/4)))
-    print("GNO is {0}".format(g_n0))
+    #print("GNO is {0}".format(g_n0))
     if method == 'hybrid': #TODO: Implement code for hybrid methodology
         pass
     else: #Use the cosine/sine method - might be a bit confusing since we're going to need switch back and forth between angular frequency
-        freq_min, freq_max = 1e-5, 15#this is going to be defined in cycles/meter, just going to convert at each step
+        freq_min, freq_max = 3e-3, 15#this is going to be defined in cycles/meter, just going to convert at each step
         #According to https://deepblue.lib.umich.edu/bitstream/handle/2027.42/769/77008.0001.001.pdf?sequence=2 (page 39),
         #the wavenumbers should go from .0033 cycles/ft to 1 cycle/ft (so .01 cycles/meter to 3.28 cycles/meter)
         #also, the separation at "low" frequencies should be .0033 cycle/ft (so .01 cycle/meter) and at "high" .01 cycle/ft
         #(so .0328 cycles/meter); we're going to do a few extra frequencies; high frequencies we'll define as anything
         #over .5 cycles/meter (no justification for this honestly)
-        freqs = []
-        f = freq_min
-        freq_step = .01
-        while f < freq_max:
-            freqs.append(f)
-            f += freq_step
-            if f >= .5:
-                freq_step = .0328
-        freqs = np.array(freqs)
+        #freqs, freq_deltas = [], []
+        #f = freq_min
+        #freq_step = .001
+        #n = 1
+        #while f < freq_max:
+        #    freqs.append(f + freq_step/2)
+        #    f += freq_step
+        #    freq_deltas.append(freq_step)
+        #    if f >= .5:
+        #        freq_step = .003
+        #    n += 1
+        M = 50000
+        delta_f = (freq_max - freq_min)/M
+        freqs = freq_min + (np.arange(1, M) -.5)*delta_f
+        #freqs = np.array(freqs)
        # M = len(freqs)
-        freq_deltas = np.concatenate((np.array([freq_min]), (freqs[2:] - freqs[:-2])/2, np.array([(freqs[-2] - freqs[-4])/2])))
+
+        #freq_deltas = np.concatenate((np.array([freq_min]), (freqs[2:] - freqs[:-2])/2, np.array([(freqs[-2] - freqs[-4])/2])))
         #print("Freq deltas is {0}".format(freq_deltas))
         distances = np.arange(0, prof_len + delta, delta)
         elevations = np.zeros(len(distances))
-        psd_vals = np.array(list(map(lambda x: iso_psd_function(g_n0, x), freqs)))
+        psd_vals = iso_psd_function(g_n0, freqs)#np.array(list(map(lambda x: iso_psd_function(g_n0, x), freqs)))
         phase_angles = np.random.uniform(0, 2*np.pi, len(freqs))
+        #freq_deltas = np.array(freq_deltas)
         for x in range(0, len(elevations)):
             d = distances[x]
-            elevations[x] = np.sum(np.sqrt(2*freq_deltas*psd_vals)*np.cos(2*np.pi*freqs*d + phase_angles))
+            elevations[x] = np.sum(np.sqrt(2*delta_f*psd_vals)*np.sin(2*np.pi*freqs*d + phase_angles))
         elevations = elevations - np.mean(elevations) #so it has zero mean
-
-        return distances, detrend(elevations)*1000
+        if ret_gn0:
+            return distances, elevations*1000, g_n0
+        return distances, elevations*1000
 
 
 

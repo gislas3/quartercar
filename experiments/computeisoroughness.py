@@ -59,7 +59,7 @@ def smooth_psd(frequencies, psd):
     nl, nh = .0014, .0028
     be = frequencies[1] - frequencies[0] #original frequency resolution
     exp_step, nH_step = 1, 2
-    print("be is {0}".format(be))
+    #print("be is {0}".format(be))
     while exp <= 3:
         nL = int(nl/be + .5)
         nH = int(nh/be + .5)
@@ -67,7 +67,7 @@ def smooth_psd(frequencies, psd):
             break
         window_psds = np.sum(psd[nL+1:nH])*be
         smth_psd = (((nL + 0.5) * be - nl) * psd[nL] + window_psds + (nh - (nH - 0.5)*be)*psd[nH])/(nh - nl)
-        new_freqs.append(nl)
+        new_freqs.append(2**exp)
         smoothed_psd.append(smth_psd)
         if exp == -5:
             step = 2/3
@@ -92,7 +92,7 @@ def fit_smooth_psd(frequencies, smooth_psd):
     :return: The linear equation of best fit (least squares) of the frequencies to the smooth_psd
     """
     to_fit_inds = np.where(np.logical_and(frequencies <= 2.83, frequencies >= .011) > 0)
-    lr = LinearRegression()
+    lr = LinearRegression(fit_intercept=False)
     #print("Frequencies is {0}, smooth_psd is {1}".format(frequencies, smooth_psd))
     f_to_fit = frequencies[to_fit_inds]
     #print("smth psd is {0}".format(smooth_psd))
@@ -101,9 +101,9 @@ def fit_smooth_psd(frequencies, smooth_psd):
     #print("F to fit is {0}".format(f_to_fit))
     f_to_fit = (f_to_fit)**(-2)
 
-    f_to_fit = f_to_fit.reshape(-1, 1)
+    #f_to_fit = f_to_fit.reshape(-1, 1)
     #print("F to fit is now {0}".format(f_to_fit))
-    lr.fit(f_to_fit, spsd_to_fit)
+    lr.fit(f_to_fit.reshape(-1, 1), spsd_to_fit)
     return lr
 
 

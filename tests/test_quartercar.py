@@ -84,6 +84,40 @@ def test_inverse():
 #    velocity = 10 # 10 m/s
 #    distances, heights = mp.make_sinusodal(wavelen, amp, prof_len, delta)
 
+def test_run2_constantacc():
+    #Test to make sure it works with one constant acceleration
+    distances, elevations = mp.make_profile_from_psd('B', 'sine', .1, 100, seed=69)
+    profile = rp.RoadProfile(distances, elevations)
+    v0 = 0
+    vehicle = qc.QC(m_s=243, m_u=40, c_s=370, k_s=14671, k_u=124660)
+    packed_vals = vehicle.run2(profile, [(2, 5)], v0=v0)
+    assert(len(packed_vals[0]) == int(12.5*1000) + 1)
 
+def test_run2_constantacc2():
+    #test to make sure it works with two constant accelerations
+    distances, elevations = mp.make_profile_from_psd('B', 'sine', .1, 100, seed=69)
+    profile = rp.RoadProfile(distances, elevations)
+    v0 = 0
+    vehicle = qc.QC(m_s=243, m_u=40, c_s=370, k_s=14671, k_u=124660)
+    packed_vals = vehicle.run2(profile, [(2, 5), (5/2, 2)], v0=v0)
+    assert(len(packed_vals[0]) == int((10 + 1/3) *1000) + 1)
+
+def test_run2_constantacc3():
+    #Test make sure it works with non constant sample rate
+    distances, elevations = mp.make_profile_from_psd('B', 'sine', .1, 100, seed=69)
+    profile = rp.RoadProfile(distances, elevations)
+    v0 = 0
+    vehicle = qc.QC(m_s=243, m_u=40, c_s=370, k_s=14671, k_u=124660)
+    packed_vals = vehicle.run2(profile, [(2, 5)], v0=v0, final_sample_rate=100)
+    assert (len(packed_vals[0]) == int(12.5 * 1000)/10 + 1)
+
+def test_run2_constantacc4():
+    #Test make sure it runs with a decceleration as well
+    distances, elevations = mp.make_profile_from_psd('B', 'sine', .1, 100, seed=69)
+    profile = rp.RoadProfile(distances, elevations)
+    v0 = 0
+    vehicle = qc.QC(m_s=243, m_u=40, c_s=370, k_s=14671, k_u=124660)
+    packed_vals = vehicle.run2(profile, [(2, 5), (5 / 2, 2), (-5/2, 2)], v0=v0)
+    assert (len(packed_vals[0]) == int(11.5 * 1000))
 
 
