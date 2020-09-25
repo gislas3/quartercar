@@ -164,30 +164,40 @@ def test_inverse_gaussian():
     #dists, orig_hts, low_pass_hts, final_dists, final_heights = mp.make_gaussian(sigma, profile_len, delta,
     #                                                                            cutoff_freq, delta2, seed)
 
-    final_dists, final_heights = mp.make_profile_from_psd('A', 'sine', .1, 100)
+    final_dists, final_heights = mp.make_profile_from_psd('A', 'sine', .05, 500)
+    plt.plot(final_dists, final_heights)
+    plt.title("original profile")
+    plt.show()
     rp1 = rp.RoadProfile(final_dists, final_heights)
     velocity = 10  # 10 m/s
     m_s, m_u, c_s, k_s, k_u = 208, 28, 1300, 18709, 127200  # QC parameters
     qc1 = qc.QC(m_s, m_u, c_s, k_s, k_u)
-    sample_rate_hz = 500
-    T, yout, xout, new_distances, new_elevations = qc1.run(rp1, 100, velocity, sample_rate_hz)
-    est_profile, est_xs, est_xs_dot, est_xu, est_xu_dot, est_xu_dot_dot, acc = qc1.inverse(yout[:, -1], new_distances, velocity,
-                                                                                      sample_rate_hz)
-
-
+    sample_rate_hz = 100
+    T, yout, xout, distances, input_elevations, velocities = qc1.run2(rp1, [], velocity, final_sample_rate=sample_rate_hz)
+    #est_profile, x_s_dot, x_s, x_u, x_u_dot, x_u_dot_dot, distances, accelerations = qc1.inverse(yout[:, -1], distances, velocity,
+    #                                                                                  sample_rate_hz)
+    input_times, input_accs, est_profile = qc1.inverse_time(T, yout[:, -1], sample_rate_hz, interp_dt=.01, interp_type='linear', 
+                    Wn_integrate=None, Wn_elevations=None, f_order=4, space_evenly=False, velocity=0)
+    plt.plot(T, yout[:, -1])
+    plt.title("Acceleration series")
+    plt.show()
+    distances = input_times * velocity
     iri_full = rp1.to_iri()
-    rp_est = rp.RoadProfile(new_distances, est_profile)
-    iri_orig = rp.RoadProfile(new_distances, new_elevations).to_iri()
+    rp_est = rp.RoadProfile(distances, est_profile)
+    iri_orig = rp.RoadProfile(final_dists, final_heights).to_iri()
     iri_est = rp_est.to_iri()
-    plt.plot(new_distances, new_elevations, color='g')
-    plt.plot(new_distances, est_profile, color='r')
+    plt.plot(final_dists, final_heights, color='g', label='True Profile')
+    plt.plot(distances, est_profile, label='Est Profile')
+    plt.legend()
+    #plt.plot(input_ds, est_elevations, color='r')
     #data1 = {"distances": new_distances, "elevations": new_elevations}
     #df1 = pd.DataFrame(data1)
     #data2 = {"distances": new_distances, "elevations": est_profile}
     #df2 = pd.DataFrame(data2)
     #df1.to_csv("/Users/gregoryislas/Documents/Mobilized/sampled_profile", index=False)
     #df2.to_csv("/Users/gregoryislas/Documents/Mobilized/estimated_profile", index=False)
-    plt.title("Estimated profile (r) (IRI={1}) and sampled input (IRI={2}, real={3}) (g), SR = {0}HZ".format(sample_rate_hz, np.round(iri_est, 3), np.round(iri_orig, 3), np.round(iri_full, 3)))
+    plt.title("Estimated profile vs reconstructed, \n True IRI: {0}, Est IRI: {1}".format(round(iri_full, 6), round(iri_est, 6)))
+    #plt.title("Estimated profile (r) (IRI={1}) and sampled input (IRI={2}, real={3}) (g), SR = {0}HZ".format(sample_rate_hz, np.round(iri_est, 3), np.round(iri_orig, 3), np.round(iri_full, 3)))
     plt.show()
 
 
@@ -374,6 +384,6 @@ def print_iri_sinusoid():
 print("NAME IS MAIN")
 #inverse1()
 #run_gaussian()
-#test_inverse_gaussian()
-show_response_diff_cars()
+test_inverse_gaussian()
+#show_response_diff_cars()
 #print_iri_sinusoid()

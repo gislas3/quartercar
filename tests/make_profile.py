@@ -88,6 +88,7 @@ def make_profile_from_psd(road_type, method, delta, prof_len, seed=55, ret_gn0=F
              heights: The elevations of the road profile (in mm)
     """
     np.random.seed(seed)
+    print("Delta is {0}".format(delta))
     #For now, we're going to use the ISO 8608 standard for the PSD function
     if road_type == 'A':
         lower, upper = 1, 32
@@ -146,11 +147,13 @@ def make_profile_from_psd(road_type, method, delta, prof_len, seed=55, ret_gn0=F
         distances = np.arange(0, prof_len + delta, delta)
         elevations = np.zeros(len(distances))
         psd_vals = iso_psd_function(g_n0, freqs)#np.array(list(map(lambda x: iso_psd_function(g_n0, x), freqs)))
+        #psd_vals = iso_psd_function(g_n0, freqs)
         phase_angles = np.random.uniform(0, 2*np.pi, len(freqs))
         #freq_deltas = np.array(freq_deltas)
         for x in range(0, len(elevations)):
             d = distances[x]
-            elevations[x] = np.sum(np.sqrt(2*delta_f*psd_vals)*np.sin(2*np.pi*freqs*d + phase_angles))
+            elevations[x] = np.sum(np.sqrt(2*delta_f*psd_vals)*np.cos(2*np.pi*freqs*d + phase_angles))
+            #elevations[x] = np.sum(np.sqrt(2*delta_f*psd_vals)*np.sin(2*np.pi*freqs*d + phase_angles))
         elevations = elevations - np.mean(elevations) #so it has zero mean
         if ret_gn0:
             return distances, elevations*1000, g_n0

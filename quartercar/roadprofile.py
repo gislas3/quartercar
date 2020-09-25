@@ -70,9 +70,11 @@ class RoadProfile():
         #
         if dist >= self.length():
             return self.elevations[-1]
-        xs = np.arange(dist, min(dist+.25, self.length()), .01)
-        to_ret = self.cs(dist)
-        return to_ret#np.mean(self.cs(xs))
+        xs = np.arange(dist, min(dist+base_len, self.length()), .01)
+        return np.mean(self.cs(xs))
+        #to_ret = self.cs(dist)
+        #return to_ret
+        
 
     def length(self):
         """
@@ -222,10 +224,12 @@ class RoadProfile():
         return x1, slopes
 
 
-    def to_iri(self):
+    def to_iri(self, st_index=None, end_index=None):
         """
         Computes the IRI over the entire road profile
         :param filter: Whether or not to filter the road profile using the standard IRI filter before computing the IRI (default: True)
+        :param st_index: Potential int start index if want to compute IRI only over subsection of profile
+        :param end_index: Potential int end index if want to compute IRI only over subsection of profile
         :return: The IRI value over the entire road profile
         """
         # parameters taken from Sayers paper, correspond to Golden Car simulation parameters, more details
@@ -235,6 +239,15 @@ class RoadProfile():
             distances, elevations = new_profile.get_distances(), new_profile.get_elevations()
         else:
             distances, elevations = self.get_distances(), self.get_elevations()
+        #TODO: Error check the indices
+        if st_index is not None or end_index is not None:
+            if st_index is None:
+                st_index = 0
+            elif end_index is None:
+                end_index  = len(distances) + 1
+            distances = distances[st_index:end_index]
+            elevations = elevations[st_index:end_index]
+
         c = 6.0
         k_1 = 653
         k_2 = 63.3
@@ -252,7 +265,7 @@ class RoadProfile():
         curr_sum = 0  # current numerator for the calculation
         n = 0  # current denominator for the calculation
         #assumption is that we've already been evenly spaced
-        dx = np.diff(distances)[0]
+        dx = np.diff(distances[:2])[0]
         x1, smooth_slps = self.compute_smoothed_slopes(distances, elevations)
 
         if(x1 is not None):

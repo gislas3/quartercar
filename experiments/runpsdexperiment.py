@@ -314,7 +314,7 @@ def compute_acc_times(v_type, length, vel, acc, acc_dist):
         time_to_reach_v = vel/acc
 
         rand_accs = norm(loc=0, scale=acc_dist).rvs(50000) #I don't like this - simulate data for 50 seconds, hope that reaches end
-        acc_times = [(acc, time_to_reach_v), (rand_accs, 50)] 
+        acc_times = [(acc, time_to_reach_v)] +  list(zip(rand_accs, len(rand_accs)*[.1]))
     elif v_type == 'acc_rand_end': #assume this means starting from v0, then random, then decelerate to stop
         acc = -acc #assume acc is positive
         v0 = vel
@@ -855,4 +855,4 @@ def parse_args_and_run():
     
 
     #title of csv file is Experiment parameters
-parse_args_and_run()
+#parse_args_and_run()

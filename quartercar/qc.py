@@ -14,7 +14,7 @@ class QC():
       2) reverses the calculation to generate a `RoadProfile` from accelerations, distances and velocities.
     """
 
-    def __init__(self, m_s=None, m_u=None, c_s=None, k_s=None, k_u=None, epsilon=None, omega_s=None, omega_u=None, xi=None): #TODO: Put in all different car parameters (with defaults) as constructor arguments
+    def __init__(self, m_s=None, m_u=None, c_s=None, k_s=None, k_u=None, epsilon=None, omega_s=None, omega_u=None, xi=None, tire_base=.25): #TODO: Put in all different car parameters (with defaults) as constructor arguments
         """
         :param c_s: The suspension damping rate (assumes units N*s/m)
         :param k_s: The suspension spring constant (assumes units N/m)
@@ -52,21 +52,13 @@ class QC():
                 #omega_s: avg = 1, min = .2, max = 1
                 #omega_u: avg = 10, min = 2, max = 20
                 #xi: avg = .55, min = 0, max = 2
-
+            self.m_s = None
             self.c = xi * 2 * omega_s  # This is c_s/(2*m_s*omega_s) * 2*omega_s = c_s/m_s
             self.k1 = omega_u ** 2 * 1 / epsilon  # This is sqrt(k_u/m_u)**2 * 1/(m_s/m_u) = k_u/m_s
             self.k2 = omega_s ** 2  # This is sqrt(k_s/m_s)**2 = k_s/m_s
             self.mu = 1 / epsilon  # This is 1/(m_s/m_u) = m_u/m_s
-
-
-
-
-
-
-
-
-
-
+        self.tire_base_len = tire_base
+        
 
     #need a method here to estimate initial state
     def get_initial_state(self, road_profile):
@@ -154,6 +146,15 @@ class QC():
         return T, yout, xout, road_sample.get_distances(), road_sample.get_elevations()
 
     def next_state(self, t0, p0, v0, delta_t, acc):
+        """
+        next_state() will return the next time, position, and velocity of the car as it drives along the request road profile.
+        :param t0: The initial time (in units seconds) of the simulation
+        :param p0: The initial instantaneous position (in units meters) of the car along the road profile 
+        :param v0: The initial instantaneous velocity (in units m/s) of the car at the time of the simulation
+        :param delta_t: The amount of time the car will be accelerating (in units seconds)
+        :param acc: The acceleration (in units m/s**2) that the car will undergo during delta_t (assumes constant acceleration)
+        :return: t0 (the next time), p0 (the next instantaneous position), v0 (the next isntantaneous velocity)
+        """
         # we aren't going to let the car go backwards, check for that here
         #if v0 == 0 and acc < 0:
         #    acc = abs(acc) #change to positive acceleration so we don't have a bunch of useless data points
@@ -198,7 +199,7 @@ class QC():
                 while ref_t < time and p0 < road_profile.length():
                     t0, p0, v0 = self.next_state(t0, p0, v0, delta_t, acc)
                     #print("t0 is {0}, v0 is {1}, p0 is {2}".format(t0, v0, p0))
-                    elev = road_profile.get_next_sample(p0)
+                    elev = road_profile.get_next_sample(p0, base_len=self.tire_base_len)
                     input_times.append(t0)
                     input_elevations.append(elev)
                     velocities.append(v0)
@@ -214,7 +215,7 @@ class QC():
                 else:
                     acc = 0
                 t0, p0, v0 = self.next_state(t0, p0, v0, delta_t, acc)
-                elev = road_profile.get_next_sample(p0)
+                elev = road_profile.get_next_sample(p0, base_len=self.tire_base_len)
                 input_times.append(t0)
                 input_elevations.append(elev)
                 distances.append(p0)
@@ -228,7 +229,7 @@ class QC():
                 acc = distribution.rvs()
                 t0, p0, v0 = self.next_state(t0, p0, v0, delta_t, acc)
 
-                elev = road_profile.get_next_sample(p0)
+                elev = road_profile.get_next_sample(p0, base_len=self.tire_base_len)
                 input_times.append(t0)
                 input_elevations.append(elev)
                 distances.append(p0)
@@ -254,6 +255,7 @@ class QC():
         # Basically, we just want dx/dt = Ax + bu, y = x
         state_space = signal.StateSpace(a, b, c, None)
         x0 = np.zeros(4).reshape(4, -1)
+        #print("LEN times is {0}, len elevations is {1}".format(len(input_times), len(input_elevations)))
         T, yout, xout = signal.lsim(state_space, input_elevations/1000, input_times, x0.reshape(1, -1))
 
         if final_sample_rate is not None:
@@ -270,8 +272,8 @@ class QC():
                 yout = yout[list(range(0, len(yout), factor)), ]
                 xout = xout[list(range(0, len(xout), factor)), ]
                 distances = distances[list(range(0, len(distances), factor))]
-                input_elevations = input_elevations[list(range(0, len(distances), factor))]
-                velocities = velocities[list(range(0, len(distances), factor))]
+                input_elevations = input_elevations[list(range(0, len(input_elevations), factor))]
+                velocities = velocities[list(range(0, len(velocities), factor))]
 
         return T, yout, xout, distances, input_elevations, velocities
 
@@ -279,6 +281,71 @@ class QC():
         #
         #return accs
 
+    def inverse_time(self, times, accelerations, sample_rate_hz, interp_dt=.01, interp_type='linear', 
+            Wn_integrate=None, Wn_elevations=None, f_order=4, space_evenly=False, velocity=0):
+        """
+        :param times: An array of the measurement times of the acceleration series
+        :param accelerations: An array of vertical accelerations in (m/s^2) (assumes that preprocessing step,
+            subtracting gravity/accounting for orientation has already occurred)
+        :param sample_rate_hz: The sample rate of the series in Hz
+        :param interp_dt: The spacing between samples to use if interpolation needs to occur for even sampling, default: .01 (100 Hz sampling rate)
+        :param interp_type: Describes the type of interpolation to use between samples (default: 'linear')
+        :param Wn_integration: Cutoff frequency to use for high pass filter for drift removal of numerical integration. default: None
+        :param Wn_elevations: The cutoff frequency to use for high pass filter for drift removal of final elevations
+        :param f_order: The order of filter to use (if needed) for the high pass filters. Default: 4
+        :param space_evenly: A boolean representing whether or not to return an evenly spaced road profile. Default: False. If set to True, must 
+                            specify velocity > 0 else a ValueError will be raised
+        :param velocity: A float representing the velocity to use for returning an evenly spaced road profile. Default: 0
+        :returns: input_times: The input times that the accelerations were recorded at
+                  input_accs: The input accelerations for estimation of the road profile
+                  elevations: The elevations (in m)
+        """
+        #Step 1: check to see if the samples have constant spacing
+        if not np.allclose(np.diff(np.diff(times)), np.zeros(len(times)-2), 1e-4):
+            #need to interpolate to space evenly
+            input_times = np.arange(times[0], times[-1]+interp_dt, interp_dt)
+            if interp_type == 'linear':
+                input_accs = np.interp(input_times, times, accelerations)
+            elif interp_type == 'cs':
+                cs = CubicSpline(input_times, accelerations)
+                input_accs = cs(input_times)
+            else:
+                raise ValueError("An invalid interpolation type was specified. The following interpolation types are currently supported: 'linear', 'cs'")
+        else:
+            input_times = times
+            input_accs = accelerations
+
+        #Step 2: Integrate in the time domain the accelerations
+        x_s_dot = integrate.cumtrapz(input_accs, input_times, initial=0)
+        if Wn_integrate is not None:
+            sos = signal.butter(f_order, Wn_integrate, 'highpass', fs=1/(input_times[1] - input_times[0]), output='sos')
+            x_s_dot = signal.sosfilt(sos, x_s_dot)
+        x_s = integrate.cumtrapz(x_s_dot, input_times, initial=0)
+        if Wn_integrate is not None:
+            x_s = signal.sosfilt(sos, x_s)
+        #Step 3: Set up state space for predicting motion of unsprung mass
+        a = -self.k2/self.c #k2 = k_s/m_s, c = c_s/m_s, -k2/c = -k_s/c_s
+        b = 1
+        state_space = signal.StateSpace(a, b, a, b)
+        U = input_accs*1/self.c + x_s_dot + self.k2/self.c*x_s #y = m_s/c_s*x_dot_dot + c_s*x_dot + k_s/c_s*x_s; c = c_s/m_s, 1/c = m_s/c_s; c_s/c_s = 1; k2 = k_s/m_s, c = c_s/m_s, k2/c = k_s/c_s
+        _, x_u_dot, x_u = signal.lsim(state_space, U, input_times)
+        
+        #Step 4: now, compute numerical derivatives of x_u_dot_dot
+        x_u_dot_dot = np.concatenate((np.zeros(1), np.diff(x_u_dot)/np.diff(input_times)))
+
+        #Step 5: now, compute road profile
+        elevations = self.mu/self.k1*x_u_dot_dot + self.c/self.k1*(x_u_dot - x_s_dot) + (self.k1+self.k2)/self.k1*x_u - self.k2/self.k1*x_s
+        if Wn_elevations is not None:
+            sos_el = signal.butter(f_order, Wn_elevations, 'highpass', fs=1/(input_times[1] - input_times[0]), output='sos')
+            elevations = signal.sosfilt(sos_el, elevations)
+        
+        #Step 6: possibly evenly space the elvations
+        if space_evenly:
+            if velocity is None or velocity < 0:
+                logging.warning("Space_evenly was set to True but an invalid velocity was specified, the program is not returning evenly spaced elevations")
+            else: #not going to worry about this yet, because not sure it makes sense on second thought
+                pass
+        return input_times, input_accs, elevations*1000
 
 
 
@@ -368,7 +435,7 @@ class QC():
         b = 1
         state_space = signal.StateSpace(a, b, a, b)
         U = accelerations*1/self.c + x_s_dot + self.k2/self.c*x_s #y = m_s/c_s*x_dot_dot + c_s*x_dot + k_s/c_s*x_s; c = c_s/m_s, 1/c = m_s/c_s; c_s/c_s = 1; k2 = k_s/m_s, c = c_s/m_s, k2/c = k_s/c_s
-        T, x_u_dot, x_u = signal.lsim(state_space, U, times)
+        _, x_u_dot, x_u = signal.lsim(state_space, U, times)
         #print("X_u shape is {0}".format(x_u[2].shape))
         #x_u_dot = a*x_u + U
 
