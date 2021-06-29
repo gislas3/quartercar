@@ -1,3 +1,5 @@
+import numpy as np
+
 from quartercar import qc
 
 # This is a handy program to have all the quarter car parameters I have encountered in one place.
@@ -35,3 +37,13 @@ def get_car_dict():
     #nissan = qc.QC(epsilon=1.37313204e+01, omega_s=1.25172854e+01, omega_u=1.93174379e+02, xi=3.47041919e-01)
     return {'car1': car1, 'car2': car2, 'car3': car3,  'car4': car4, 
         'car5': car5, 'car6': car6, 'car7': car7, 'suv1': suv1, 'suv2': suv2, 'bus': bus}
+
+def get_random_car(rng=None):
+    """
+    Returns a random car from the car list
+    """
+    if rng is None:
+        car_tup = np.random.choice(get_car_list())
+    else:
+        car_tup = rng.choice(get_car_list())
+    return car_tup[1]

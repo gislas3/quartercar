@@ -42,7 +42,7 @@ def initialize_kf_est_params(true_car, true_road_sigma, F_known, Q_known, ku_mu,
         road_sigma = true_road_sigma
     else: # Going to assume that we are not off by more than 100% when we randomly choose the road profile sigma
         e_road_sigma = np.random.uniform(0, 1)
-        road_sigma =  (1 + np.random.choice([1, -1]) * e_road_sigma ) * road_sigma
+        road_sigma =  (1 + np.random.choice([1, -1]) * e_road_sigma ) * true_road_sigma
         p_to_opt.append('Q')
 
     Q = np.array([[0, 0, 0, 0], 
@@ -467,7 +467,7 @@ def add_profile_error_stats(ret_dict, est_elevations, true_profile, sampled_prof
     #total_time = len(est_elevations)/sample_rate_hz  # total_time = total_samples/samples_per_second
     #total_distance = total_time * velocity # d/t = v, therefore d = t * v
     #est_dists = np.linspace(0, total_distance, len(est_elevations)) # evenly space the measurements
-    est_profile = roadprofile.RoadProfile(distances=sampled_profile.get_distances(), elevations=est_elevations*1000)
+    est_profile = roadprofile.RoadProfile(distances=sampled_profile.get_distances(), elevations=est_elevations*1000, filtered=True)
     st_index = np.where(est_profile.get_distances() >= 50)[0][0] # Ignore first 50 meters due to error of initial conditions
 
     mse = np.mean((est_profile.get_elevations()[st_index:] - sampled_profile.get_elevations()[st_index:])**2)
@@ -489,11 +489,11 @@ def add_profile_error_stats(ret_dict, est_elevations, true_profile, sampled_prof
     e_ind1, e_ind2 = 2*step1, 2*step2
     iri_true_prev, iri_est_prev = None, None
     # Compute IRI error over each 50 and 100 meter segments, skipping the first 50 meters
-    logging.debug("Len true: {0}, len est: {1}".format(len(true_profile.get_distances()), len(est_profile.get_distances())))
-    logging.debug("tot segments is {0}".format(tot_segments))
+    # logging.debug("Len true: {0}, len est: {1}".format(len(true_profile.get_distances()), len(est_profile.get_distances())))
+    # logging.debug("tot segments is {0}".format(tot_segments))
     for x in range(1, tot_segments):
-        logging.debug("it = {0}, st_ind1: {1} st_ind2 = {2}".format(x, st_ind1, st_ind2))
-        logging.debug("it = {0}, e_ind1: {1} e_ind2 = {2}".format(x, e_ind1, e_ind2))
+        # logging.debug("it = {0}, st_ind1: {1} st_ind2 = {2}".format(x, st_ind1, st_ind2))
+        # logging.debug("it = {0}, e_ind1: {1} e_ind2 = {2}".format(x, e_ind1, e_ind2))
         
         iri_true = true_profile.to_iri(st_ind1, e_ind1+1)
         iri_est = est_profile.to_iri(st_ind2, e_ind2+1)
@@ -532,7 +532,7 @@ def add_profile_error_stats(ret_dict, est_elevations, true_profile, sampled_prof
     
 
 def estimate(road_type, road_length, road_number, profile, velocities, gn0, output_directory, acc_noise,
-                F_known, Q_known, fu_mu_known, sample_rates, n_param_inits, order, orig_sr_hz=1000, P0s=[.001, .01, .1]):
+                F_known, Q_known, fu_mu_known, sample_rates, n_param_inits, order, orig_sr_hz=1000, P0s=[.1], n_sim=None):
     """
     Function that defines all the steps for:
     1. Randomly picking a car to drive over a road profile.
@@ -569,7 +569,7 @@ def estimate(road_type, road_length, road_number, profile, velocities, gn0, outp
 
 
     # All the things that we are going to compute - kind of annoying, but couldn't think of a better design.
-    ret_dict = {'Gn0': [], 'Car': [], 'Velocity': [], 'Sample_Rate': [], 'Acc_Noise': [], 
+    ret_dict = {'Road_Class': [], 'Road_Length': [], 'Road_Num': [], 'Gn0': [], 'Car': [], 'Velocity': [], 'Sample_Rate': [], 'Acc_Noise': [], 
     'P0': [], 'True_Road_Sigma': [], 'Est_Road_Sigma_Avg': [], 'Var_Road_Sigma': [], 'Est_Road_Sigma_Max': [], 'True_Eps': [], 'True_Ws': [], 'True_Wu': [], 'True_Xi': [], 
     'Est_Eps_Avg': [], 'Est_Ws_Avg': [], 'Est_Wu_Avg': [], 'Est_Xi_Avg':[], 'Var_Eps': [], 'Var_Ws': [], 'Var_Wu': [], 
     'Var_Xi': [], 'Est_Eps_Max': [], 'Est_Ws_Max': [], 'Est_Wu_Max': [], 'Est_Xi_Max': [], 
@@ -579,9 +579,11 @@ def estimate(road_type, road_length, road_number, profile, velocities, gn0, outp
     c_list = cars.get_car_list() # Get the list of cars
     st_time = time.time() # get the start time.
     for v in velocities:
-        
+        st_time_veloc = time.time()
         #for car_tup in cars.get_car_list(): #This way, does acceleration for each car only once
+        #if car_tup is None:
         car_ind = np.random.choice(len(c_list)) # randomly pick a car to use for each velocity
+        
         car_tup = c_list[car_ind]
         cname, true_car = car_tup[0], car_tup[1]
         true_iri = profile.to_iri()
@@ -591,6 +593,7 @@ def estimate(road_type, road_length, road_number, profile, velocities, gn0, outp
         sprung_accs = yout[:, -1] # Probably should change that function...
         #avg_params, max_l_params = estimate_car_parameters(ret_dict, gn0, profile, cname, car, v, sprung_acces, new_els, 
         #sample_rates, F_known, Q_known, fu_mu_known, acc_noise, n_param_inits, order)
+        st_time_sample_rate = time.time()
         for sr_hz in sample_rates:
             dt = 1/sr_hz # space between samples, reciprocal of sampling rate.
             factor = int(orig_sr_hz/sr_hz) # the downsampling rate
@@ -603,6 +606,7 @@ def estimate(road_type, road_length, road_number, profile, velocities, gn0, outp
             sampled_profile = roadprofile.RoadProfile(distances=sampled_dists, elevations=sampled_els)
             true_road_sigma = np.var(np.diff(sampled_els/1000)) # calculate the variance of the profile in the time domain - need to divide by 1000 since originally is in mm
             zs = sampled_accs.reshape(-1, 1) # reshape the sampled accelerations so that each row contains one sample
+            st_time_sigma = time.time()
             for sigma in acc_noise:
                 added_noise = np.random.normal(loc=0, scale=np.sqrt(sigma), size=zs.shape) # Generate the noise
                 accs_plus_noise = zs + added_noise # add the noise
@@ -617,31 +621,48 @@ def estimate(road_type, road_length, road_number, profile, velocities, gn0, outp
                     ret_dict['P0'].append(p) # append initial covariance
                     ret_dict['True_Road_Sigma'].append(true_road_sigma) # append the true process noise variance
                     ret_dict['IRI_True'].append(true_iri)
+                    ret_dict['Road_Class'].append(road_type)
+                    ret_dict['Road_Length'].append(road_length)
+                    ret_dict['Road_Num'].append(road_number)
+                    
                     add_true_car_params(ret_dict, cname, true_car) # Append the car parameters
 
                     # Now, estimate whichever parameters we're supposed to! 
+                    est_param_time = time.time()
                     est_param_dicts = estimate_model_parameters(true_car, true_road_sigma, sigma, v, accs_plus_noise, dt, F_known, Q_known, 
                         fu_mu_known, n_param_inits, order, x0, P0)
-
+                    logging.debug("Took {0} seconds to estimate parameters".format(time.time() - est_param_time))
                     # Add these estiamted parameters
                     add_est_params(ret_dict, est_param_dicts)
                     # Now, estimate the profile using the two estimates
-
+                    est_prof_time = time.time()
                     profile_est_avg = estimate_profile(*est_param_dicts[0].values(), accs_plus_noise, sigma, dt)
                     profile_est_max = estimate_profile(*est_param_dicts[1].values(), accs_plus_noise, sigma, dt)
-                    
+                    logging.debug("Took {0} seconds to estimate profile".format(time.time() - est_prof_time))
                     # Compute the errors and add them
                     add_profile_error_stats(ret_dict, profile_est_avg, profile, sampled_profile, 'Avg')
                     add_profile_error_stats(ret_dict, profile_est_max, profile, sampled_profile, 'Max')
+            logging.debug("Took {0} seconds for one round sigma with len sigmas = {1}".format(time.time() - st_time_sigma, len(acc_noise)))
+        logging.debug("Took {0} seconds for one round sample rate with len sample rates = {1}".format(time.time() - st_time_sample_rate, len(sample_rates)))
+    logging.debug("Took {0} seconds for one round velocity with len velocities = {1}".format(time.time() - st_time_veloc, len(velocities)))
     # Finally, save the file
     try:
-        with gzip.open("{0}{1}_{2}_{3}.pickle.gz".format(output_directory, road_type, road_length, road_number), 'wb') as f:
+        fname = None
+        if n_sim is None:
+            fname = "{0}{1}_{2}_{3}.pickle.gz".format(output_directory, road_type, road_length, road_number)
+        else:
+            fname = "{0}Simulation_Num_{1}.pickle.gz".format(output_directory, n_sim)
+        with gzip.open(fname, 'wb') as f:
             pickle.dump(ret_dict, f)
     except Exception as e:
-        logging.error("Failed saving file for {0}_{1}_{2}, exception was {3}".format(road_type, road_length, road_number, e))
+        if fname is not None:
+            fname_fmt = fname.split('/')[-1]
+        else:
+            fname_fmt = "FILE WAS NONE"
+        logging.error("Failed saving file {0}, exception was {1}".format(fname_fmt, e))
     #car_param_info = estimate_model_parameters(ret_dict, profile, args['car'], true_car, *args[0].values()[5:])
     #estimate_profile(ret_dict, *car_param_info[0], car_param_info[1], car_param_info[2], car_param_info[3])
-    return time.time() - st_time, road_type, road_length, road_number #or save to file?
+    return time.time() - st_time, road_type, road_length, road_number, n_sim #or save to file?
 
 def estimate_star(args):
     """

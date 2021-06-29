@@ -49,6 +49,7 @@ def parse_args_and_run():
                         metavar='N',
                         help='The numer of profiles (per class)')
 
+    
     parser.add_argument('--velocities', '--vels', nargs='*',
                         metavar='[vel1, vel2, ..., veln]',
                         help='The velocities at which to drive the cars over the profile')
@@ -90,8 +91,14 @@ def parse_args_and_run():
     metavar='0/1',
     help='Flag indicating whether Fu/mu is supposed to be known or unknown. Default: 0 (unknown). Ignored if --F_known set to 1')
 
+    parser.add_argument('--vel_weights', '--velocity_weights', '--vws', nargs='*', 
+    metavar='[Weight_1, Weight_2, ...., Weight_N]',
+    help='The weights to use for randomly selecting the velocities. Needs to be the same length as the velocities if using simulation method 2')
 
-    
+    parser.add_argument('--rl_weights', '--road_length_weights', nargs='*',
+                        metavar='[Length_Weight1, Length_Weight2, ..., Length_WeightN]',
+                        help='The weights at which to use for choosing the road length')
+
     parser.add_argument('--acc_noise', '--acc_noise_level', '--meas_noise', nargs='*', 
     metavar='[Sigma_1, Sigma_2, ..., Sigma_N]',
     help='The noise levels to use for the accelerometer noise')
@@ -106,6 +113,11 @@ def parse_args_and_run():
     const=1,
     help="The order of the taylor series expansion to use for the discretization of the state space. Default: 1. Use 'inf' to use a numerical matrix exponential algorithm")
 
+    parser.add_argument('--num_simulations', '--n_sims', '--simulations', '--num_sims', nargs='?', type=int,
+    default=100,
+    const=100,
+    metavar='N_SIMULATIONS',
+    help='The number of simulations to perform for this experiment')
 
     parser.add_argument('--seed', '--start_seed', type=int, nargs='?',
     default=1,
@@ -113,7 +125,11 @@ def parse_args_and_run():
     metavar='RANDOM_SEED', 
     help='The seed to use for the random parameter initializations')
 
- 
+    parser.add_argument('--exp_type', '--experiment_type', nargs='?', type=int, 
+    default=1,
+    const=1,
+    metavar='EXP_TYPE',
+    help='The type of experiment to run. Type 1 for generating fixed values, type 2 for randomly selecting parameters for each experiment')
     
 
 
@@ -143,10 +159,23 @@ def parse_args_and_run():
     args.velocities = list(map(lambda x: int(x), args.velocities))
     args.sample_rates = list(map(lambda x: int(x), args.sample_rates))
     args.acc_noise = list(map(lambda x: float(x), args.acc_noise))
+    if len(args.vel_weights) > 0 and args.vel_weights[0] is not None:
+        args.vel_weights = list(map(lambda x: float(x), args.vel_weights))
+    else:
+        args.vel_weights = len(args.velocities) * [1/len(args.velocities)]
+    if len(args.rl_weights) > 0 and args.rl_weights[0] is not None:
+        args.rl_weights = list(map(lambda x: float(x), args.rl_weights))
+    else:
+        args.rl_weights = len(args.road_lengths) * [1/len(args.road_lengths)]
     # Create the data generator that will be used to load in the road profiles, and give the input to the program which will simulate a car trip, 
     # then estimate the road profile and vehicle parameters 
-    acc_data_generator = kalmangenerateaccs.acc_input_data_generator(args.profile_directory, args.road_types, args.road_lengths,
-    args.num_roads, args.velocities, args.output_directory, args.sample_rates, args.acc_noise, args.F_known, args.Q_known, args.fu_mu_known, args.n_param_inits)
+    if args.exp_type == 1:
+        acc_data_generator = kalmangenerateaccs.acc_input_data_generator(args.profile_directory, args.road_types, args.road_lengths,
+        args.num_roads, args.velocities, args.output_directory, args.sample_rates, args.acc_noise, args.F_known, args.Q_known, args.fu_mu_known, args.n_param_inits)
+    else: # If you don't type 1, you're getting the second option
+        acc_data_generator = kalmangenerateaccs.acc_random_data_generator(args.profile_directory, args.road_types, args.road_lengths, args.rl_weights,
+        args.num_roads, args.velocities, args.vel_weights, args.output_directory, args.sample_rates, args.acc_noise, args.F_known, args.Q_known, args.fu_mu_known, args.n_param_inits,
+        args.num_simulations) #TODO: Maybe make an option for including weights for the simulation; if this gets big enough, might want to make a simulation class...
     
     #Decide whether to use multiprocessing or not
     if args.processes != 0: 
@@ -156,7 +185,7 @@ def parse_args_and_run():
             processes = None
         with Pool(processes) as pool:
             for tup in pool.imap_unordered(emexp.estimate_star, acc_data_generator, args.chunk_size):
-                logging.info("Took {0} seconds to run Class: {1}, Length: {2}, #: {3} ".format(tup[0], tup[1], tup[2], tup[3]))
+                logging.info("Took {0} seconds to run Class: {1}, Length: {2}, #: {3}, n_sim: {4} ".format(tup[0], tup[1], tup[2], tup[3], tup[4]))
                 #pass
     else: #This will probably be very slow, but good for testing
         for val in acc_data_generator:

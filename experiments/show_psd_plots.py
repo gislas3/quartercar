@@ -809,12 +809,106 @@ def fit_psd_trial1():
     
     #profile = rp.RoadProfile(distances, elevations, filtered=True)
 
+def plot_road_profile_new_method():
+    profile_len = 1000
+    # dist, orig_hts, low_pass_hts, distances, elevations = mp.make_gaussian(sigma, profile_len, delta,
+    #                                                                             cutoff_freq, delta2, seed)
+    #sample_rate_hz = 250
+    dx = .01
+    road_classes = []
+    for x in range(0, 10):
+        distances1, elevations1, true_gn0 = mp.make_profile_from_psd('B', 'approximate frequency', dx, profile_len, 
+        seed=x, g_n0=50, ret_gn0=True)
+        # plt.plot()
+    # profile = rp.RoadProfile(distances1, elevations1, filtered=True)
+        plt.plot(distances1, elevations1, label='Prof1')
+        plt.legend()
+        plt.show()
+        # #plt.plot(distances2, elevations2, label='Prof2')
+        # #distances2, elevations2, _ = mp.make_profile_from_psd('B', 'approximate frequency', dx, profile_len, 
+        # #seed=55, g_n0=true_gn0, ret_gn0=True)
+        # #plt.plot(distances2, elevations2, label='Prof2')
+        # plt.legend()
+        # plt.title("Plot of road profiles")
+        # plt.show()
+        # f_road1, psd_road1 = periodogram(elevations1/1000, 1/dx, window='hann')
+        f_road3, psd_road3 = periodogram(elevations1/1000, 1/dx)
+        smth_freqs, smth_psd = cisr.smooth_psd(f_road3, psd_road3)
+        regressor = cisr.fit_smooth_psd(smth_freqs, smth_psd)
+        freqs = np.arange(.001, 20, dx)
+        psd = mp.iso_psd_function(true_gn0, freqs)
+        plt.loglog(freqs, psd, label='Hypothetical PSD')
+        plt.loglog(smth_freqs, smth_psd, label='Estimated PSD from Smoothed PSD Regres')
+        plt.legend()
+        plt.show()
+    # print("lr coefficient is {0}, lr intercept is {1}".format(regressor.coef_, regressor.intercept_))
+    
+    
+    #f_road2, psd_road2 = periodogram(elevations2/1000, 1/dx)
+    #f_road2, psd_road2 = periodogram(elevations2, 1/dx)
+    # plt.loglog(f_road1, psd_road1, label='Estimated PSD, Periodogram, R1')
+
+    #plt.loglog(f_road2, psd_road2, label='Estimated PSD, Periodogram, R2')
+    #plt.loglog(f_road2, psd_road2, label='Prof2')
+        # f1, acc_psd1 = welch(elevations1/1000, 1/dx, nperseg=2048)
+        #f2, acc_psd2 = welch(elevations2/1000, 1/dx, nperseg=512)
+        # freqs = np.arange(.001, 20, dx)
+        # psd = mp.iso_psd_function(true_gn0, freqs)
+        road_class = regressor.coef_[0][0]* 1e8
+        road_classes.append(road_class)
+
+        
+        # psd_smooth = mp.iso_psd_function(road_class, freqs)
+        # psd2 = (true_gn0*2*np.pi*.1**2*1e-6* dx**2)/((2 * np.sin(2*np.pi*freqs *dx/2))**2)
+        # psd2 = (true_gn0/16*1e-6* dx**2)/((2 * np.sin(2*np.pi*freqs *dx/2))**2) * 2* np.pi
 
 
+        # plt.loglog(freqs, mp.iso_psd_function(true_gn0 + 50, freqs), label='GNO + 10')
+        # plt.loglog(freqs, mp.iso_psd_function(max(true_gn0 - 100, 1), freqs), label='GNO - 10')
+        # plt.loglog(f_road1, psd_road1*1.63**2, label="PSD, Hann, Corrected")
+        # plt.loglog(f_road1, psd_road1, label="PSD, Hann, UnCorrected")
+        # plt.loglog(f_road3, psd_road3, label="PSD, Boxcar")
+        # plt.loglog(f1, acc_psd1*1.63**2, label="PSD, Welch Corrected")
+        # plt.loglog(f1, acc_psd1, label="PSD, Welch Uncorrected")
+        # plt.loglog(freqs, psd2, label='Hyp PSD Corrected')
+        # # plt.loglog(f1, acc_psd1*1.63**2, label='Welch Estimate PSD, R1')
+        # plt.loglog(freqs, psd_smooth, label='Estimated PSD from Smoothed PSD Regres')
+        # # plt.loglog(f_road1, psd_road1, label="Periodogram estimate of PSD")
+        # #plt.loglog(f2, acc_psd2, label='Welch Estimate PSD, R2')
+        # plt.loglog(freqs, psd, label='Hypothetical PSD')
+
+        # plt.title("PSD of road profiles, GN0 = {0}, Est GN0={1}".format(true_gn0, road_class))
+        # plt.legend()
+        # plt.show()
+    plt.hist(road_classes)
+    plt.title("Mean = {0}, True Gn0={1}".format(np.mean(road_classes), true_gn0))
+    plt.show()
+
+def test_psd_spat_ang():
+    spatial_gn0 = 32
+
+    #plt.plot(distances2, elevations2, label='Prof2')
+
+
+    #f_road2, psd_road2 = periodogram(elevations2, 1/dx)
+
+    freqs_spatial = np.arange(.001, 20, .01)
+
+    psd_spatial = mp.iso_psd_function(spatial_gn0, freqs_spatial)
+    psd_angular = mp.iso_psd_function_angular(spatial_gn0/16, freqs_spatial  * 2* np.pi)
+
+    plt.loglog(freqs_spatial, psd_spatial, label='Spatial PSD')
+    plt.loglog(freqs_spatial, psd_angular, label='PSD Angular')
+    plt.loglog(freqs_spatial, psd_angular * (2 * np.pi), label='PSD Angular * 2pi')
+    plt.title("Test PSD GN0 = {0}".format(spatial_gn0))
+    plt.legend()
+    plt.show()
 #fit_psd_trial1()
 #show_acc_psd_diff_vs()
 #show_plot_with_constantacc()
 #show_isoroughness_smooth()
 #show_car_acc_plots()
-show_psd_time_domain()
+# show_psd_time_domain()
 #show_car_transfer_function()
+plot_road_profile_new_method()
+# test_psd_spat_ang()

@@ -1,5 +1,6 @@
 import argparse, logging, time, pickle, gzip, sys
 import numpy as np
+from scipy.stats import norm, uniform
 from quartercar import qc, roadprofile, cars
 from multiprocessing import Pool, Lock
 
@@ -94,6 +95,38 @@ def generate_accs(road_type, road_length, road_number, profile, velocities, gn0,
 #     return generate_accs(**args)
 #     #logging.info("Generated accs")
 
+def load_profile(profile_directory, rt, rl, n):
+    dists = np.load('{0}Profile_{1}_{2}_{3}_distances.npy'.format(profile_directory, rt, rl, n))
+    elevations = np.load('{0}Profile_{1}_{2}_{3}_elevations.npy'.format(profile_directory, rt, rl, n))
+    gn0 = np.load('{0}Profile_{1}_{2}_{3}_gn0.npy'.format(profile_directory, rt, rl, n))
+    return roadprofile.RoadProfile(distances=dists, elevations=elevations), gn0
+
+def acc_random_data_generator(profile_directory, road_types, road_lengths, road_length_weights,
+        num_roads, velocities, vel_weights, output_directory, sample_rates, acc_noise, F_known, Q_known, fu_mu_known, n_param_inits,
+        num_simulations, order=1):
+
+    for x in range(0, num_simulations):
+        try:
+            v = int(np.round(np.random.choice(velocities, p=vel_weights) + np.random.normal(loc=0, scale=2)))
+        except Exception as e:
+            logging.error("Please fix the velocities and weights, exception was {0}".format(e))
+            sys.exit(1)
+        rt = np.random.choice(road_types)
+        try:
+            rl = np.random.choice(road_lengths, p=road_length_weights)
+        except Exception as e:
+            logging.error("Please fix the road lengths and weights, exception was {0}".format(e))
+            sys.exit(1)
+        n = np.random.choice(num_roads)
+        curr_profile, gn0 = load_profile(profile_directory, rt, rl, n)
+        sample_rate = np.random.choice(sample_rates)
+        sigma_acc = np.random.choice(acc_noise)
+        #car = np.random.choice(get_)
+        yield {'road_type': rt, 'road_length': rl, 'road_number': n, 'profile': curr_profile,
+                'velocities':[v], 'gn0': gn0, 'output_directory': output_directory, 'acc_noise': [sigma_acc],
+                'F_known': F_known, 'Q_known': Q_known, 'fu_mu_known': fu_mu_known, 'sample_rates': [sample_rate], 'n_param_inits': n_param_inits,
+                'order': order, 'n_sim': x}
+
 def acc_input_data_generator(profile_directory, road_types, road_lengths, num_roads, velocities, output_directory, sample_rates, acc_noise, 
     F_known, Q_known, fu_mu_known, n_param_inits, order=1):
     """
@@ -110,10 +143,7 @@ def acc_input_data_generator(profile_directory, road_types, road_lengths, num_ro
     for rt in road_types:
         for rl in road_lengths:
             for n in range(0, num_roads):
-                dists = np.load('{0}Profile_{1}_{2}_{3}_distances.npy'.format(profile_directory, rt, rl, n))
-                elevations = np.load('{0}Profile_{1}_{2}_{3}_elevations.npy'.format(profile_directory, rt, rl, n))
-                gn0 = np.load('{0}Profile_{1}_{2}_{3}_gn0.npy'.format(profile_directory, rt, rl, n))
-                curr_profile = roadprofile.RoadProfile(distances=dists, elevations=elevations)
+                curr_profile, gn0 = load_profile(profile_directory, rt, rl, n)
                 yield {'road_type': rt, 'road_length': rl, 'road_number': n, 'profile': curr_profile,
                 'velocities': velocities, 'gn0': gn0, 'output_directory': output_directory, 'acc_noise': acc_noise,
                 'F_known': F_known, 'Q_known': Q_known, 'fu_mu_known': fu_mu_known, 'sample_rates': sample_rates, 'n_param_inits': n_param_inits,
